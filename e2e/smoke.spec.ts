@@ -6,5 +6,8 @@ test("new-tab page loads from the extension", async ({
 }) => {
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/src/newtab/index.html`);
-  await expect(page.getByText(/Bookmark Desktop/i)).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Bookmark folders" }),
+  ).toBeVisible();
+  await expect(page.getByText(/Selected folder:/)).toBeVisible();
 });
