@@ -43,8 +43,8 @@
 
 ## 6. Cross-Folder Drag
 
-- [ ] 6.1 Implement drag bookmark icon → drop on sidebar folder row → `chrome.bookmarks.move` + next-free-cell placement in destination
-- [ ] 6.2 Implement drag folder row → drop on another folder row (sidebar-only) → `chrome.bookmarks.move`, preserving nested items' stored positions
+- [x] 6.1 Implement drag bookmark icon → drop on sidebar folder row → `chrome.bookmarks.move` + next-free-cell placement in destination
+- [x] 6.2 Implement drag folder row → drop on another folder row (sidebar-only) → `chrome.bookmarks.move`, preserving nested items' stored positions
 
 ## 7. Icon Assets
 
