@@ -35,9 +35,9 @@ body {
 
 .canvas-grid {
   flex: 1;
-  display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
+  display: grid;
+  align-content: start;
+  justify-content: start;
   gap: 8px;
   padding: 8px;
   overflow: auto;
@@ -47,6 +47,17 @@ body {
   overflow-y: auto;
 }
 
+.grid-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.grid-cell--over {
+  background: light-dark(rgb(0 0 0 / 8%), rgb(255 255 255 / 12%));
+  border-radius: 8px;
+}
+
 .bookmark-icon {
   display: flex;
   flex-direction: column;
@@ -54,9 +65,15 @@ body {
   gap: 4px;
   background: none;
   border: none;
-  cursor: pointer;
+  cursor: grab;
   font: inherit;
   color: inherit;
+  touch-action: none;
+}
+
+.bookmark-icon--dragging {
+  opacity: 0.5;
+  cursor: grabbing;
 }
 
 .bookmark-icon-placeholder {

@@ -111,6 +111,29 @@ describe("Canvas", () => {
     });
   });
 
+  it("renders a full grid of droppable cells, including empty ones", async () => {
+    mock.addNode(folderNode("f1", "0"));
+    mock.addNode(bookmarkNode("b0", "f1", 0));
+
+    render(<Canvas folderId="f1" />);
+    await resizeCanvas(200, 100);
+    // 200x100 at default settings (min 48) -> capacity 4x2 = 8 cells total.
+    await waitFor(() => {
+      expect(document.querySelectorAll(".grid-cell")).toHaveLength(8);
+    });
+  });
+
+  it("marks bookmark icons as draggable", async () => {
+    mock.addNode(folderNode("f1", "0"));
+    mock.addNode(bookmarkNode("b0", "f1", 0));
+
+    render(<Canvas folderId="f1" />);
+    await resizeCanvas(200, 100);
+
+    const icon = (await screen.findByText("Bookmark b0")).closest("button");
+    expect(icon).toHaveAttribute("aria-roledescription", "draggable");
+  });
+
   it("does not paginate when everything fits on one page", async () => {
     mock.addNode(folderNode("f1", "0"));
     mock.addNode(bookmarkNode("b0", "f1", 0));

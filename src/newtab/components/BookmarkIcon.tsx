@@ -1,3 +1,6 @@
+import { CSS } from "@dnd-kit/utilities";
+import { useDraggable } from "@dnd-kit/core";
+
 interface BookmarkIconProps {
   bookmark: chrome.bookmarks.BookmarkTreeNode;
   size: number;
@@ -5,10 +8,13 @@ interface BookmarkIconProps {
 
 /**
  * Placeholder visual only — real favicon/custom-icon rendering is
- * implemented in Group 7. Clicking navigates the current tab, per the
- * canvas display requirement.
+ * implemented in Group 7. Clicking navigates the current tab, dragging
+ * repositions it (see Canvas's DndContext), per the canvas requirements.
  */
 export function BookmarkIcon({ bookmark, size }: BookmarkIconProps) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({ id: bookmark.id });
+
   function handleClick() {
     if (bookmark.url) {
       window.location.assign(bookmark.url);
@@ -17,10 +23,17 @@ export function BookmarkIcon({ bookmark, size }: BookmarkIconProps) {
 
   return (
     <button
+      ref={setNodeRef}
       type="button"
-      className="bookmark-icon"
-      style={{ width: size, height: size }}
+      className={`bookmark-icon${isDragging ? " bookmark-icon--dragging" : ""}`}
+      style={{
+        width: size,
+        height: size,
+        transform: CSS.Translate.toString(transform),
+      }}
       onClick={handleClick}
+      {...listeners}
+      {...attributes}
     >
       <span className="bookmark-icon-placeholder" aria-hidden="true" />
       <span className="bookmark-icon-label">{bookmark.title}</span>

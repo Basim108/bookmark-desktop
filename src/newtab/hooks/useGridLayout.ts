@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getBookmarksInFolder } from "../../lib/bookmarks/read";
+import type { PositionUpdate } from "../../lib/grid/dragDrop";
 import { paginate } from "../../lib/grid/layout";
 import { backfillFolderPositions } from "../../lib/grid/seed";
-import { reflowFolderPositions, shouldReflow } from "../../lib/grid/reflow";
+import {
+  reflowFolderPositions,
+  shouldReflowOnGrowth,
+} from "../../lib/grid/reflow";
 import {
   computeAutoCapacity,
   computeAutoIconSize,
@@ -11,6 +15,7 @@ import {
 import type { GridCapacity } from "../../lib/grid/types";
 import type { LayoutCell } from "../../lib/grid/layout";
 import { resolveGridSettings } from "../../lib/storage/gridSettings";
+import { setBookmarkPositions } from "../../lib/storage/positions";
 import { GLOBAL_DEFAULT_GRID_SETTINGS } from "../../lib/storage/schema";
 import type { FolderPositions, GridSettings } from "../../lib/storage/schema";
 import { useElementSize } from "./useElementSize";
@@ -20,6 +25,7 @@ const FALLBACK_FIXED_CAPACITY: GridCapacity = { cols: 6, rows: 4 };
 
 interface UseGridLayoutResult {
   containerRef: React.RefObject<HTMLDivElement | null>;
+  capacity: GridCapacity;
   pages: LayoutCell[][];
   bookmarksById: Map<string, chrome.bookmarks.BookmarkTreeNode>;
   iconSize: number;
@@ -27,6 +33,7 @@ interface UseGridLayoutResult {
   loading: boolean;
   currentPage: number;
   setCurrentPage: (page: number) => void;
+  moveBookmarks: (updates: PositionUpdate[]) => Promise<void>;
 }
 
 interface FolderData {
@@ -111,8 +118,12 @@ export function useGridLayout(folderId: string): UseGridLayoutResult {
   );
 
   // Once real dimensions are measured, seed any missing positions using
-  // the first-observed capacity as this session's baseline; subsequent
-  // capacity changes (an actual resize) trigger the reflow algorithm.
+  // the first-observed capacity as this session's baseline. Subsequent
+  // *growth* triggers the mutating backfill repack. Shrink NEVER mutates
+  // stored positions (see lib/grid/layout.ts's paginate) — it's handled
+  // purely at render time below — so previousCapacityRef intentionally
+  // stays pinned to the last-mutated baseline across a shrink, meaning a
+  // later growth is still compared against pre-shrink capacity.
   useEffect(() => {
     if (!settingsLoaded || size.width === 0 || size.height === 0) {
       return;
@@ -126,7 +137,7 @@ export function useGridLayout(folderId: string): UseGridLayoutResult {
           previousCapacityRef.current = capacity;
         }
       });
-    } else if (shouldReflow(previous, capacity)) {
+    } else if (shouldReflowOnGrowth(previous, capacity)) {
       void reflowFolderPositions(folderId, capacity).then((result) => {
         if (!cancelled) {
           setPositions(result);
@@ -139,7 +150,10 @@ export function useGridLayout(folderId: string): UseGridLayoutResult {
     };
   }, [folderId, settingsLoaded, capacity, size.width, size.height]);
 
-  const pages = paginate(positions);
+  // paginate() is a pure display computation: it's re-run on every render
+  // against the *current* capacity, so shrink-driven compaction/overflow
+  // always reflects the latest size even though nothing was persisted.
+  const pages = paginate(positions, capacity);
   const currentPage =
     pageSelection.folderId === folderId
       ? Math.min(pageSelection.page, Math.max(pages.length - 1, 0))
@@ -151,8 +165,23 @@ export function useGridLayout(folderId: string): UseGridLayoutResult {
     ]),
   );
 
+  async function moveBookmarks(updates: PositionUpdate[]): Promise<void> {
+    if (updates.length === 0) {
+      return;
+    }
+    await setBookmarkPositions(folderId, updates);
+    setPositions((current) => {
+      const next = { ...current };
+      for (const update of updates) {
+        next[update.bookmarkId] = update.cell;
+      }
+      return next;
+    });
+  }
+
   return {
     containerRef,
+    capacity,
     pages,
     bookmarksById,
     iconSize,
@@ -160,5 +189,6 @@ export function useGridLayout(folderId: string): UseGridLayoutResult {
     loading: !settingsLoaded,
     currentPage,
     setCurrentPage: (page: number) => setPageSelection({ folderId, page }),
+    moveBookmarks,
   };
 }
