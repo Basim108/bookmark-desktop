@@ -15,7 +15,7 @@
 Runs separately from per-PR CI so a flagged finding never blocks a merge —
 it shows up as a red run in the **Actions** tab instead.
 
-- **Retire.js** (`npx retire --path dist`) — flags known-vulnerable
+- **Retire.js** (`npm run security:retire`) — flags known-vulnerable
   JavaScript libraries in the built extension
 - **Semgrep** (`p/security-audit` + `p/javascript` + `p/typescript`
   community rulesets, `--error` so findings fail the job) — dangerous
@@ -25,6 +25,22 @@ Both are free, require no account/login, and need **no GitHub secrets** —
 this workflow runs with zero repo configuration beyond the file itself.
 You can also trigger it on demand from the Actions tab
 (`workflow_dispatch`) instead of waiting for the weekly cron.
+
+### Running these locally
+
+The devcontainer (`.devcontainer/`) sets both up automatically — no
+manual installs needed:
+
+- `retire` is an npm devDependency; `npm run security:retire` just works.
+- Semgrep is installed via `pipx` in `postCreateCommands.sh` (pipx avoids
+  Debian's PEP 668 restriction on installing Python packages into the
+  system interpreter); run it with the same command as CI:
+  `semgrep --error --config p/security-audit --config p/javascript --config p/typescript --exclude node_modules --exclude dist --exclude "*.test.*" --exclude e2e src/ manifest.config.ts`
+- Playwright's Chromium (needed for `npm run test:e2e`) is installed via
+  `npx playwright install --with-deps chromium`.
+
+If you're not using the devcontainer, run those same commands yourself
+once.
 
 ## GitHub repo setup
 
@@ -60,7 +76,7 @@ consciously accept each finding before the next release.
    `--pack-extension=dist --pack-extension-key=<path-to-existing-key.pem>`
    (omit `--pack-extension-key` only on the very first pack, when there
    is no key yet — Chrome generates one alongside the `.crx`).
-2. Re-run `npx retire --path dist` and the Semgrep command above (or just
+2. Re-run `npm run security:retire` and the Semgrep command above (or just
    trigger `security-scan.yml` manually) and resolve any findings.
 3. Upload the `.crx` (or the `dist` folder as a zip, per the Chrome Web
    Store Developer Dashboard's current requirements) manually — store

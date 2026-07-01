@@ -24,6 +24,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npm run build && playwright test",
+    "security:retire": "npm run build && retire --path dist",
     "prepare": "husky"
   },
   "dependencies": {
@@ -56,6 +57,7 @@
     "jsdom": "^29.1.1",
     "lint-staged": "^17.0.8",
     "prettier": "^3.9.4",
+    "retire": "^5.4.3",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.62.1",
     "vite": "^8.1.2",

@@ -20,11 +20,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build extension
-        run: npm run build
-
       - name: Retire.js — known-vulnerable JS library scan
-        run: npx --yes retire --path dist --outputformat text
+        run: npm run security:retire -- --outputformat text
 
       - uses: actions/setup-python@v5
         with:
