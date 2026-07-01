@@ -68,14 +68,14 @@
 
 ## 10. Testing
 
-- [ ] 10.1 Unit tests: grid sizing formula, backfill/compaction logic, next-free-cell placement, inheritance chain resolution
+- [x] 10.1 Unit tests: grid sizing formula, backfill/compaction logic, next-free-cell placement, inheritance chain resolution
 - [x] 10.2 Unit tests: icon upload validation (magic bytes, size/dimension limits, SVG rejection)
-- [ ] 10.3 E2E: drag-and-drop reposition persists across reload
-- [ ] 10.4 E2E: folder selection filters canvas correctly
-- [ ] 10.5 E2E: bookmark click navigation
+- [x] 10.3 E2E: drag-and-drop reposition persists across reload
+- [x] 10.4 E2E: folder selection filters canvas correctly
+- [x] 10.5 E2E: bookmark click navigation
 - [x] 10.6 E2E: favicon fallback and custom icon upload/removal
 - [x] 10.7 E2E: multi-tab live sync (layout and structure changes)
-- [ ] 10.8 E2E: cross-folder drag (bookmark→folder, folder→folder)
+- [x] 10.8 E2E: cross-folder drag (bookmark→folder, folder→folder)
 
 ## 11. Pre-Publish Security Scan
 
