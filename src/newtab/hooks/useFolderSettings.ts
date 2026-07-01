@@ -9,6 +9,8 @@ import type { FolderSettings } from "../../lib/storage/schema";
 export function useFolderSettings(folderId: string): {
   settings: FolderSettings;
   reload: () => void;
+  /** Bumped every reload; pass to CustomIconImage so it refetches after an upload/removal that doesn't change folderId. */
+  version: number;
 } {
   const [settings, setSettings] = useState<FolderSettings>(
     DEFAULT_FOLDER_SETTINGS,
@@ -27,5 +29,9 @@ export function useFolderSettings(folderId: string): {
     };
   }, [folderId, reloadToken]);
 
-  return { settings, reload: () => setReloadToken((token) => token + 1) };
+  return {
+    settings,
+    reload: () => setReloadToken((token) => token + 1),
+    version: reloadToken,
+  };
 }

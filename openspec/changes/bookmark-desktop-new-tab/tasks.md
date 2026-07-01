@@ -48,18 +48,18 @@
 
 ## 7. Icon Assets
 
-- [ ] 7.1 Implement favicon retrieval via MV3 `_favicon` API
-- [ ] 7.2 Implement custom icon upload UI (PNG/JPEG/WebP/AVIF only, reject SVG)
-- [ ] 7.3 Implement magic-byte file-type validation on upload
-- [ ] 7.4 Implement max file size / max pixel dimension enforcement on upload
-- [ ] 7.5 Store uploaded image bytes in IndexedDB; store reference/metadata in `chrome.storage.local`
-- [ ] 7.6 Implement custom icon removal (revert to favicon)
-- [ ] 7.7 Implement generic fallback icon (favicon unresolvable and no custom icon) — placeholder asset until final asset is supplied
-- [ ] 7.8 Ensure all icon rendering uses `<img>`/blob URL, never inline-parsed markup
+- [x] 7.1 Implement favicon retrieval via MV3 `_favicon` API
+- [x] 7.2 Implement custom icon upload UI (PNG/JPEG/WebP/AVIF only, reject SVG)
+- [x] 7.3 Implement magic-byte file-type validation on upload
+- [x] 7.4 Implement max file size / max pixel dimension enforcement on upload
+- [x] 7.5 Store uploaded image bytes in IndexedDB; store reference/metadata in `chrome.storage.local`
+- [x] 7.6 Implement custom icon removal (revert to favicon)
+- [x] 7.7 Implement generic fallback icon (favicon unresolvable and no custom icon) — placeholder asset until final asset is supplied
+- [x] 7.8 Ensure all icon rendering uses `<img>`/blob URL, never inline-parsed markup
 
 ## 8. Label Display Settings
 
-- [ ] 8.1 Implement per-bookmark label display setting (under-icon vs. tooltip), default visible, no inheritance
+- [x] 8.1 Implement per-bookmark label display setting (under-icon vs. tooltip), default visible, no inheritance
 
 ## 9. Live Cross-Tab Sync
 
@@ -69,11 +69,11 @@
 ## 10. Testing
 
 - [ ] 10.1 Unit tests: grid sizing formula, backfill/compaction logic, next-free-cell placement, inheritance chain resolution
-- [ ] 10.2 Unit tests: icon upload validation (magic bytes, size/dimension limits, SVG rejection)
+- [x] 10.2 Unit tests: icon upload validation (magic bytes, size/dimension limits, SVG rejection)
 - [ ] 10.3 E2E: drag-and-drop reposition persists across reload
 - [ ] 10.4 E2E: folder selection filters canvas correctly
 - [ ] 10.5 E2E: bookmark click navigation
-- [ ] 10.6 E2E: favicon fallback and custom icon upload/removal
+- [x] 10.6 E2E: favicon fallback and custom icon upload/removal
 - [ ] 10.7 E2E: multi-tab live sync (layout and structure changes)
 - [ ] 10.8 E2E: cross-folder drag (bookmark→folder, folder→folder)
 

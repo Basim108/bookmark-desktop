@@ -63,6 +63,9 @@ export function installChromeMock() {
   };
 
   const chromeMock = {
+    runtime: {
+      getURL: (path: string) => `chrome-extension://test-extension-id${path}`,
+    },
     storage: {
       local: {
         get: vi.fn(async (keys?: string | string[] | null) => {

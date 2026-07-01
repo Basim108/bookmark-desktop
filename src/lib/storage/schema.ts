@@ -33,6 +33,15 @@ export const GLOBAL_DEFAULT_GRID_SETTINGS: GridSettings = {
   minIconSize: 48,
 };
 
+export type BookmarkLabelDisplay = "under-icon" | "tooltip";
+
+/** A bookmark's own display settings. Independent per bookmark — no inheritance (same shape of rule as FolderSettings). */
+export interface BookmarkSettings {
+  labelDisplay: BookmarkLabelDisplay;
+  /** Metadata mirror of whether an IndexedDB icon record exists (Group 7), so UI can render/gate without an async IndexedDB read. */
+  hasCustomIcon: boolean;
+}
+
 /**
  * Full chrome.storage.local shape. Only `positions`, `folderSettings`, and
  * `gridSettings` are implemented so far; the remaining key is reserved so
@@ -46,8 +55,8 @@ export interface StorageSchema {
   gridSettings: Record<string, GridSettings>;
   /** The global fallback grid settings, used when no folder in the ancestor chain has an override. */
   globalGridSettings: GridSettings;
-  /** bookmarkId -> label display + custom icon ref (Groups 7/8) */
-  bookmarkSettings?: Record<string, unknown>;
+  /** bookmarkId -> label display + custom-icon metadata mirror */
+  bookmarkSettings: Record<string, BookmarkSettings>;
   /** folderId -> sidebar display settings */
   folderSettings: Record<string, FolderSettings>;
 }

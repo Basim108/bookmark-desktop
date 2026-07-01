@@ -2,6 +2,11 @@ const DB_NAME = "bookmark-desktop";
 const DB_VERSION = 1;
 const ICON_STORE = "icons";
 
+interface StoredIcon {
+  bytes: ArrayBuffer;
+  type: string;
+}
+
 let dbPromise: Promise<IDBDatabase> | undefined;
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -19,12 +24,22 @@ function openDatabase(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
-/** Stores raw icon bytes for a bookmark or folder id. Upload validation (format/size) happens in Group 7, above this layer. */
+/**
+ * Stores an icon's raw bytes for a bookmark or folder id. Stored as an
+ * ArrayBuffer + MIME type rather than a Blob directly, since
+ * structured-clone support for Blob is inconsistent across IndexedDB
+ * implementations; getIcon reconstructs the Blob on read. Upload
+ * validation (format/size) happens above this layer, in lib/icons.
+ */
 export async function putIcon(itemId: string, blob: Blob): Promise<void> {
+  const record: StoredIcon = {
+    bytes: await blob.arrayBuffer(),
+    type: blob.type,
+  };
   const db = await openDatabase();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(ICON_STORE, "readwrite");
-    tx.objectStore(ICON_STORE).put(blob, itemId);
+    tx.objectStore(ICON_STORE).put(record, itemId);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -32,12 +47,16 @@ export async function putIcon(itemId: string, blob: Blob): Promise<void> {
 
 export async function getIcon(itemId: string): Promise<Blob | undefined> {
   const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(ICON_STORE, "readonly");
-    const request = tx.objectStore(ICON_STORE).get(itemId);
-    request.onsuccess = () => resolve(request.result as Blob | undefined);
-    request.onerror = () => reject(request.error);
-  });
+  const record = await new Promise<StoredIcon | undefined>(
+    (resolve, reject) => {
+      const tx = db.transaction(ICON_STORE, "readonly");
+      const request = tx.objectStore(ICON_STORE).get(itemId);
+      request.onsuccess = () =>
+        resolve(request.result as StoredIcon | undefined);
+      request.onerror = () => reject(request.error);
+    },
+  );
+  return record ? new Blob([record.bytes], { type: record.type }) : undefined;
 }
 
 export async function deleteIcon(itemId: string): Promise<void> {

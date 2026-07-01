@@ -3,10 +3,14 @@ import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useSubfolders } from "../hooks/useSubfolders";
 import { useFolderSettings } from "../hooks/useFolderSettings";
-import { setFolderSidebarDisplay } from "../../lib/storage/folderSettings";
-import { resolveFolderDisplay } from "../../lib/storage/folderSettings";
+import {
+  resolveFolderDisplay,
+  setFolderHasCustomIcon,
+  setFolderSidebarDisplay,
+} from "../../lib/storage/folderSettings";
 import type { FolderSidebarDisplay } from "../../lib/storage/schema";
 import { CustomIconImage } from "./CustomIconImage";
+import { IconUploadControls } from "./IconUploadControls";
 
 interface FolderTreeNodeProps {
   folder: chrome.bookmarks.BookmarkTreeNode;
@@ -30,7 +34,7 @@ export function FolderTreeNode({
   const [expanded, setExpanded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { folders: subfolders } = useSubfolders(folder.id);
-  const { settings, reload } = useFolderSettings(folder.id);
+  const { settings, reload, version } = useFolderSettings(folder.id);
 
   // A folder row is both a drag source (moving it to another folder) and a
   // drop target (accepting a dragged bookmark or another dragged folder) —
@@ -67,6 +71,11 @@ export function FolderTreeNode({
     reload();
   }
 
+  async function handleIconChange(hasCustomIcon: boolean) {
+    await setFolderHasCustomIcon(folder.id, hasCustomIcon);
+    reload();
+  }
+
   return (
     <li>
       <div
@@ -97,7 +106,11 @@ export function FolderTreeNode({
           {...attributes}
         >
           {display !== "label-only" && (
-            <CustomIconImage itemId={folder.id} alt={folder.title} />
+            <CustomIconImage
+              itemId={folder.id}
+              alt={folder.title}
+              version={version}
+            />
           )}
           {display !== "icon-only" && (
             <span className="folder-label">{folder.title}</span>
@@ -131,6 +144,11 @@ export function FolderTreeNode({
               {option.label}
             </label>
           ))}
+          <IconUploadControls
+            itemId={folder.id}
+            hasCustomIcon={settings.hasCustomIcon}
+            onChange={(hasCustomIcon) => void handleIconChange(hasCustomIcon)}
+          />
         </div>
       )}
 
