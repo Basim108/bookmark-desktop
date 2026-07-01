@@ -17,6 +17,10 @@ export default tseslint.config(
     rules: {
       "no-unsanitized/method": "error",
       "no-unsanitized/property": "error",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
     },
   },
   {
