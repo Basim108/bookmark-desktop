@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { installChromeMock } from "../../test/chromeMock";
-import { reflowFolderPositions, repackPositions, shouldReflow } from "./reflow";
+import {
+  reflowFolderPositions,
+  repackPositions,
+  shouldReflowOnGrowth,
+} from "./reflow";
 import { getFolderPositions, setFolderPositions } from "../storage/positions";
 import type { FolderPositions } from "../storage/schema";
 
@@ -10,29 +14,42 @@ beforeEach(() => {
   mock.reset();
 });
 
-describe("shouldReflow", () => {
-  it("reflows when columns increase", () => {
-    expect(shouldReflow({ cols: 3, rows: 2 }, { cols: 4, rows: 2 })).toBe(true);
+describe("shouldReflowOnGrowth", () => {
+  it("reflows when columns increase and rows don't shrink", () => {
+    expect(
+      shouldReflowOnGrowth({ cols: 3, rows: 2 }, { cols: 4, rows: 2 }),
+    ).toBe(true);
   });
 
-  it("reflows when columns decrease", () => {
-    expect(shouldReflow({ cols: 4, rows: 2 }, { cols: 3, rows: 2 })).toBe(true);
+  it("does NOT reflow when columns decrease (shrink is display-only, never mutates)", () => {
+    expect(
+      shouldReflowOnGrowth({ cols: 4, rows: 2 }, { cols: 3, rows: 2 }),
+    ).toBe(false);
   });
 
-  it("reflows when rows decrease", () => {
-    expect(shouldReflow({ cols: 3, rows: 3 }, { cols: 3, rows: 2 })).toBe(true);
+  it("does NOT reflow when rows decrease (shrink is display-only, never mutates)", () => {
+    expect(
+      shouldReflowOnGrowth({ cols: 3, rows: 3 }, { cols: 3, rows: 2 }),
+    ).toBe(false);
   });
 
   it("does NOT reflow when only rows increase", () => {
-    expect(shouldReflow({ cols: 3, rows: 2 }, { cols: 3, rows: 3 })).toBe(
-      false,
-    );
+    expect(
+      shouldReflowOnGrowth({ cols: 3, rows: 2 }, { cols: 3, rows: 3 }),
+    ).toBe(false);
+  });
+
+  it("does NOT reflow when columns grow but rows simultaneously shrink", () => {
+    // A mixed transition: avoid mutating since it contains a shrink.
+    expect(
+      shouldReflowOnGrowth({ cols: 3, rows: 3 }, { cols: 4, rows: 2 }),
+    ).toBe(false);
   });
 
   it("does not reflow when capacity is unchanged", () => {
-    expect(shouldReflow({ cols: 3, rows: 2 }, { cols: 3, rows: 2 })).toBe(
-      false,
-    );
+    expect(
+      shouldReflowOnGrowth({ cols: 3, rows: 2 }, { cols: 3, rows: 2 }),
+    ).toBe(false);
   });
 });
 
@@ -70,7 +87,7 @@ describe("repackPositions", () => {
     expect(page1Count).toBe(2); // was 4 before backfill, now only I and J
   });
 
-  it("compacts displaced items into empty cells on shrink instead of leaving gaps", () => {
+  it("is a generic dense repack that removes gaps for any target capacity", () => {
     // capacity 4x2 (perPage 8), a gap at (0,1) from a removed item.
     const positions: FolderPositions = {
       A: { page: 0, row: 0, col: 0 },
@@ -80,13 +97,15 @@ describe("repackPositions", () => {
 
     const repacked = repackPositions(positions, { cols: 4, rows: 2 });
 
-    // Dense repack removes the gap entirely (stable order A, C, D).
     expect(repacked.A).toEqual({ page: 0, row: 0, col: 0 });
     expect(repacked.C).toEqual({ page: 0, row: 0, col: 1 });
     expect(repacked.D).toEqual({ page: 0, row: 0, col: 2 });
   });
 
-  it("is reversible: shrinking then growing back to the original capacity restores the original arrangement", () => {
+  it("is reversible: repacking into a smaller then back to the original capacity restores the original arrangement", () => {
+    // Not how the app calls this in practice (shrink never calls
+    // repackPositions), but demonstrates the pure function's stability
+    // property that growth-repack relies on.
     const original: FolderPositions = {
       A: { page: 0, row: 0, col: 0 },
       B: { page: 0, row: 0, col: 1 },

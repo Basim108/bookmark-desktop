@@ -1,28 +1,21 @@
 import { getFolderPositions, setFolderPositions } from "../storage/positions";
-import { indexToCell } from "./placement";
-import type { GridCapacity, GridCell } from "./types";
+import { compareCells, indexToCell } from "./placement";
+import type { GridCapacity } from "./types";
 import type { FolderPositions } from "../storage/schema";
-
-function compareCells(a: GridCell, b: GridCell): number {
-  return a.page - b.page || a.row - b.row || a.col - b.col;
-}
 
 /**
  * Densely repacks entries into the given capacity, preserving their
- * relative (page, row, col) order as a stable sort key. This is the one
- * algorithm behind three spec requirements at once:
- *  - column growth backfill: growing cols increases cells-per-page, so
- *    later entries shift into newly available earlier-page cells,
- *    cascading and potentially collapsing trailing pages.
- *  - shrink compaction/cascade: a dense repack has zero gaps by
- *    construction, which is the strongest form of "compact first, cascade
- *    to the next page only once a page is full."
- *  - resuming exact positions: because the sort key is the *current*
- *    stored (page, row, col) and repacking preserves relative order,
- *    repacking into a capacity that's later restored exactly reproduces
- *    the pre-shrink arrangement, with no special-casing needed.
- * Row-only growth deliberately does not call this (see shouldReflow) —
- * the spec wants new row cells left empty, not backfilled.
+ * relative (page, row, col) order as a stable sort key. Used only for
+ * column growth: growing cols increases cells-per-page, so later entries
+ * shift into newly available earlier-page cells, cascading and
+ * potentially collapsing trailing pages — the "column growth backfill"
+ * requirement.
+ *
+ * This mutates stored positions, which is why it must NOT be used for
+ * shrinking: per "Pinned Position Resilience Under Shrink," a bookmark's
+ * stored position must never change due to a shrink — shrink-driven
+ * compaction/overflow is a pure, display-only concern (see
+ * lib/grid/layout.ts's paginate), not persisted here.
  */
 export function repackPositions(
   positions: FolderPositions,
@@ -39,21 +32,22 @@ export function repackPositions(
 }
 
 /**
- * Whether a capacity transition warrants running the reflow (repack)
- * algorithm. Column count changing in either direction reflows (backfill
- * on growth, compaction on shrink); rows only reflow on shrink — row-only
- * growth is an intentional no-op that leaves new cells empty.
+ * Whether a capacity transition is a "pure" column growth that should
+ * trigger the mutating backfill repack: columns must increase, and rows
+ * must not simultaneously decrease (a simultaneous row shrink is handled
+ * separately, display-only, to avoid mutating positions during a shrink).
+ * Row-only growth is an intentional no-op — new row cells stay empty.
  */
-export function shouldReflow(
+export function shouldReflowOnGrowth(
   oldCapacity: GridCapacity,
   newCapacity: GridCapacity,
 ): boolean {
-  const colsChanged = oldCapacity.cols !== newCapacity.cols;
-  const rowsDecreased = newCapacity.rows < oldCapacity.rows;
-  return colsChanged || rowsDecreased;
+  const colsGrew = newCapacity.cols > oldCapacity.cols;
+  const rowsShrunk = newCapacity.rows < oldCapacity.rows;
+  return colsGrew && !rowsShrunk;
 }
 
-/** Reads, repacks, and persists a folder's positions for a new capacity. */
+/** Reads, repacks, and persists a folder's positions for a new (grown) capacity. */
 export async function reflowFolderPositions(
   folderId: string,
   capacity: GridCapacity,

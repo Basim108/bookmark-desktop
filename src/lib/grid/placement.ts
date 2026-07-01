@@ -21,6 +21,11 @@ export function indexToCell(index: number, capacity: GridCapacity): GridCell {
   return { page, row, col };
 }
 
+/** Reading-order comparator: page, then row, then col. */
+export function compareCells(a: GridCell, b: GridCell): number {
+  return a.page - b.page || a.row - b.row || a.col - b.col;
+}
+
 /**
  * Finds the lowest-index empty cell given the currently occupied cells.
  * Occupied cells may come from any page/row/col combination (including
