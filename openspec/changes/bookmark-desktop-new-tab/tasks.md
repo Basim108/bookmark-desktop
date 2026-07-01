@@ -8,11 +8,11 @@
 
 ## 2. Bookmark Data Layer
 
-- [ ] 2.1 Implement `chrome.bookmarks` read layer (folder tree, per-folder children)
-- [ ] 2.2 Define extension storage schema: `chrome.storage.local` for positions/settings, IndexedDB for custom icon bytes
-- [ ] 2.3 Implement first-run bulk seed: walk each folder's Chrome-order bookmarks into next-free-cells
-- [ ] 2.4 Implement next-free-cell placement (new bookmark created, moved into folder, moved back to a prior folder)
-- [ ] 2.5 Wire `chrome.bookmarks.onCreated/onRemoved/onMoved/onChanged` listeners; ignore same-parent reorder events
+- [x] 2.1 Implement `chrome.bookmarks` read layer (folder tree, per-folder children)
+- [x] 2.2 Define extension storage schema: `chrome.storage.local` for positions/settings, IndexedDB for custom icon bytes
+- [x] 2.3 Implement first-run bulk seed: walk each folder's Chrome-order bookmarks into next-free-cells
+- [x] 2.4 Implement next-free-cell placement (new bookmark created, moved into folder, moved back to a prior folder)
+- [x] 2.5 Wire `chrome.bookmarks.onCreated/onRemoved/onMoved/onChanged` listeners; ignore same-parent reorder events
 
 ## 3. Sidebar & Folder Tree
 
