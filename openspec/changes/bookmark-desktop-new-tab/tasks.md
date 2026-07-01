@@ -35,11 +35,11 @@
 
 ## 5. Position Model & Drag Interactions
 
-- [ ] 5.1 Implement drag-and-drop repositioning within canvas (updates stored position)
-- [ ] 5.2 Implement swap-on-drop-to-occupied-cell
-- [ ] 5.3 Implement drag-to-edge auto-advance pagination
-- [ ] 5.4 Implement pinned-position overflow-page handling (resume exact position when grid regains capacity)
-- [ ] 5.5 Implement click-to-navigate on bookmark icon
+- [x] 5.1 Implement drag-and-drop repositioning within canvas (updates stored position)
+- [x] 5.2 Implement swap-on-drop-to-occupied-cell
+- [x] 5.3 Implement drag-to-edge auto-advance pagination
+- [x] 5.4 Implement pinned-position overflow-page handling (resume exact position when grid regains capacity)
+- [x] 5.5 Implement click-to-navigate on bookmark icon (already covered by Group 4's BookmarkIcon)
 
 ## 6. Cross-Folder Drag
 
