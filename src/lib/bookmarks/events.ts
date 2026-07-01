@@ -98,9 +98,33 @@ export function registerBookmarkListeners(): void {
   });
 
   // Title/url edits don't affect stored grid position; listener kept so
-  // future capabilities (e.g. favicon cache invalidation in Group 7) have
-  // a single place to hook in.
+  // other capabilities (e.g. favicon cache invalidation) have a single
+  // place to hook in.
   chrome.bookmarks.onChanged.addListener(() => {
     // Intentional no-op for the position layer.
   });
+}
+
+/**
+ * Subscribes to any chrome.bookmarks structure event — create, remove,
+ * move, title/url change, or native reorder — regardless of whether it
+ * originated from this extension's own UI or Chrome's native bookmark
+ * manager. Used by newtab UI hooks (sidebar folder tree, canvas bookmark
+ * list) to refetch their view live, since Chrome delivers these events to
+ * every extension context in the profile with no custom messaging needed.
+ * Returns an unsubscribe function.
+ */
+export function subscribeToBookmarkChanges(callback: () => void): () => void {
+  chrome.bookmarks.onCreated.addListener(callback);
+  chrome.bookmarks.onRemoved.addListener(callback);
+  chrome.bookmarks.onMoved.addListener(callback);
+  chrome.bookmarks.onChanged.addListener(callback);
+  chrome.bookmarks.onChildrenReordered.addListener(callback);
+  return () => {
+    chrome.bookmarks.onCreated.removeListener(callback);
+    chrome.bookmarks.onRemoved.removeListener(callback);
+    chrome.bookmarks.onMoved.removeListener(callback);
+    chrome.bookmarks.onChanged.removeListener(callback);
+    chrome.bookmarks.onChildrenReordered.removeListener(callback);
+  };
 }

@@ -26,6 +26,14 @@ export function installChromeMock() {
   const storage = new Map<string, unknown>();
   const bookmarkNodes = new Map<string, chrome.bookmarks.BookmarkTreeNode>();
 
+  const storageOnChanged =
+    createEvent<
+      (
+        changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+        areaName: string,
+      ) => void
+    >();
+
   const bookmarksEvents = {
     onCreated:
       createEvent<
@@ -82,9 +90,15 @@ export function installChromeMock() {
           return result;
         }),
         set: vi.fn(async (items: Record<string, unknown>) => {
+          const changes: Record<
+            string,
+            { oldValue?: unknown; newValue?: unknown }
+          > = {};
           for (const [key, value] of Object.entries(items)) {
+            changes[key] = { oldValue: storage.get(key), newValue: value };
             storage.set(key, value);
           }
+          storageOnChanged.emit(changes, "local");
         }),
         remove: vi.fn(async (keys: string | string[]) => {
           const keyList = Array.isArray(keys) ? keys : [keys];
@@ -96,6 +110,7 @@ export function installChromeMock() {
           storage.clear();
         }),
       },
+      onChanged: storageOnChanged,
     },
     bookmarks: {
       ...bookmarksEvents,
@@ -138,6 +153,7 @@ export function installChromeMock() {
       for (const event of Object.values(bookmarksEvents)) {
         event.clearListeners();
       }
+      storageOnChanged.clearListeners();
     },
   };
 }

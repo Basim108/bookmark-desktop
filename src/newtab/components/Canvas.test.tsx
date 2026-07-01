@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { installChromeMock } from "../../test/chromeMock";
 import { installResizeObserverMock } from "../../test/resizeObserverMock";
 import { DndTestProvider } from "../../test/DndTestProvider";
+import { setBookmarkPositions } from "../../lib/storage/positions";
 import { Canvas } from "./Canvas";
 
 const mock = installChromeMock();
@@ -156,5 +157,56 @@ describe("Canvas", () => {
       expect(screen.getByText("Bookmark b0")).toBeInTheDocument();
     });
     expect(screen.queryByLabelText("Canvas pages")).not.toBeInTheDocument();
+  });
+
+  it("live-updates positions when changed from another tab", async () => {
+    mock.addNode(folderNode("f1", "0"));
+    mock.addNode(bookmarkNode("b0", "f1", 0));
+    mock.addNode(bookmarkNode("b1", "f1", 1));
+
+    renderCanvas("f1");
+    await resizeCanvas(200, 100);
+
+    await waitFor(() => {
+      const labels = screen
+        .getAllByText(/Bookmark b/)
+        .map((el) => el.textContent);
+      expect(labels).toEqual(["Bookmark b0", "Bookmark b1"]);
+    });
+
+    // Simulates another open new-tab page swapping these two bookmarks'
+    // positions, not a drag within this Canvas instance.
+    await setBookmarkPositions("f1", [
+      { bookmarkId: "b0", cell: { page: 0, row: 0, col: 1 } },
+      { bookmarkId: "b1", cell: { page: 0, row: 0, col: 0 } },
+    ]);
+
+    await waitFor(() => {
+      const labels = screen
+        .getAllByText(/Bookmark b/)
+        .map((el) => el.textContent);
+      expect(labels).toEqual(["Bookmark b1", "Bookmark b0"]);
+    });
+  });
+
+  it("live-updates a bookmark's title on a chrome.bookmarks structure event, without any drag", async () => {
+    mock.addNode(folderNode("f1", "0"));
+    const bookmark = bookmarkNode("b0", "f1", 0);
+    mock.addNode(bookmark);
+
+    renderCanvas("f1");
+    await resizeCanvas(200, 100);
+    await waitFor(() => {
+      expect(screen.getByText("Bookmark b0")).toBeInTheDocument();
+    });
+
+    // Simulates a rename via Chrome's native bookmark manager (or another
+    // open new-tab page), not any action within this Canvas instance.
+    const renamed = { ...bookmark, title: "Renamed Bookmark" };
+    mock.addNode(renamed);
+    mock.chrome.bookmarks.onChanged.emit("b0", { title: "Renamed Bookmark" });
+
+    expect(await screen.findByText("Renamed Bookmark")).toBeInTheDocument();
+    expect(screen.queryByText("Bookmark b0")).not.toBeInTheDocument();
   });
 });

@@ -3,9 +3,11 @@ import {
   DEFAULT_BOOKMARK_SETTINGS,
   getBookmarkSettings,
 } from "../../lib/storage/bookmarkSettings";
+import { onStorageKeysChanged } from "../../lib/storage/onChanged";
+import { STORAGE_KEYS } from "../../lib/storage/schema";
 import type { BookmarkSettings } from "../../lib/storage/schema";
 
-/** Loads a bookmark's label-display + custom-icon settings. Live updates on setting changes are wired in Group 9. */
+/** Loads a bookmark's label-display + custom-icon settings, live-updating when changed from any open new-tab page (this one or another). */
 export function useBookmarkSettings(bookmarkId: string): {
   settings: BookmarkSettings;
   reload: () => void;
@@ -28,6 +30,14 @@ export function useBookmarkSettings(bookmarkId: string): {
       cancelled = true;
     };
   }, [bookmarkId, reloadToken]);
+
+  useEffect(
+    () =>
+      onStorageKeysChanged([STORAGE_KEYS.BOOKMARK_SETTINGS], () =>
+        setReloadToken((token) => token + 1),
+      ),
+    [],
+  );
 
   return {
     settings,

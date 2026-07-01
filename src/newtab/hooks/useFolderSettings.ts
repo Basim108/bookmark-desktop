@@ -3,9 +3,11 @@ import {
   DEFAULT_FOLDER_SETTINGS,
   getFolderSettings,
 } from "../../lib/storage/folderSettings";
+import { onStorageKeysChanged } from "../../lib/storage/onChanged";
+import { STORAGE_KEYS } from "../../lib/storage/schema";
 import type { FolderSettings } from "../../lib/storage/schema";
 
-/** Loads a folder's sidebar display settings. Live updates on setting changes are wired in Group 9. */
+/** Loads a folder's sidebar display settings, live-updating when changed from any open new-tab page (this one or another). */
 export function useFolderSettings(folderId: string): {
   settings: FolderSettings;
   reload: () => void;
@@ -28,6 +30,14 @@ export function useFolderSettings(folderId: string): {
       cancelled = true;
     };
   }, [folderId, reloadToken]);
+
+  useEffect(
+    () =>
+      onStorageKeysChanged([STORAGE_KEYS.FOLDER_SETTINGS], () =>
+        setReloadToken((token) => token + 1),
+      ),
+    [],
+  );
 
   return {
     settings,

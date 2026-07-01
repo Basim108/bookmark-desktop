@@ -3,7 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { installChromeMock } from "../../test/chromeMock";
 import { DndTestProvider } from "../../test/DndTestProvider";
-import { setBookmarkHasCustomIcon } from "../../lib/storage/bookmarkSettings";
+import {
+  setBookmarkHasCustomIcon,
+  setBookmarkLabelDisplay,
+} from "../../lib/storage/bookmarkSettings";
 import { putIcon } from "../../lib/storage/iconDb";
 import { BookmarkIcon } from "./BookmarkIcon";
 
@@ -72,6 +75,20 @@ describe("BookmarkIcon", () => {
       screen.getByRole("button", { name: "Bookmark b1 icon settings" }),
     );
     await user.click(screen.getByRole("radio", { name: "Tooltip only" }));
+
+    await waitFor(() =>
+      expect(screen.queryByText("Bookmark b1")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByTitle("Bookmark b1")).toBeInTheDocument();
+  });
+
+  it("live-updates its label display when changed from another tab", async () => {
+    renderIcon(bookmarkNode("b1"));
+    expect(await screen.findByText("Bookmark b1")).toBeInTheDocument();
+
+    // Simulates the setting changing via chrome.storage in another open
+    // new-tab page, not any action within this component.
+    await setBookmarkLabelDisplay("b1", "tooltip");
 
     await waitFor(() =>
       expect(screen.queryByText("Bookmark b1")).not.toBeInTheDocument(),

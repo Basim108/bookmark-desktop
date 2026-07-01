@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useDndMonitor } from "@dnd-kit/core";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { getSubfolders } from "../../lib/bookmarks/read";
+import { subscribeToBookmarkChanges } from "../../lib/bookmarks/events";
 
 interface UseSubfoldersResult {
   folders: chrome.bookmarks.BookmarkTreeNode[];
@@ -24,6 +25,7 @@ export function useSubfolders(folderId: string): UseSubfoldersResult {
     folderId: "",
     folders: [],
   });
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,7 +37,16 @@ export function useSubfolders(folderId: string): UseSubfoldersResult {
     return () => {
       cancelled = true;
     };
-  }, [folderId]);
+  }, [folderId, reloadToken]);
+
+  // Live sync: refetch on any bookmark/folder structure change, whether it
+  // came from this extension's own UI or Chrome's native bookmark manager,
+  // and whether it happened in this tab or another open one.
+  useEffect(
+    () =>
+      subscribeToBookmarkChanges(() => setReloadToken((token) => token + 1)),
+    [],
+  );
 
   useDndMonitor({
     onDragEnd(event: DragEndEvent) {

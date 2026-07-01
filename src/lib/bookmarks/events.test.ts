@@ -1,6 +1,9 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { installChromeMock } from "../../test/chromeMock";
-import { registerBookmarkListeners } from "./events";
+import {
+  registerBookmarkListeners,
+  subscribeToBookmarkChanges,
+} from "./events";
 import { getFolderPositions } from "../storage/positions";
 
 const mock = installChromeMock();
@@ -169,6 +172,40 @@ describe("onMoved", () => {
     await flush();
 
     expect(await getFolderPositions("folder-b")).toEqual({});
+  });
+});
+
+describe("subscribeToBookmarkChanges", () => {
+  it("invokes the callback for created, removed, moved, changed, and reordered events", () => {
+    const callback = vi.fn();
+    subscribeToBookmarkChanges(callback);
+
+    mock.chrome.bookmarks.onCreated.emit("b1", node("b1", "f1"));
+    mock.chrome.bookmarks.onRemoved.emit("b1", {
+      parentId: "f1",
+      index: 0,
+      node: node("b1", "f1"),
+    });
+    mock.chrome.bookmarks.onMoved.emit("b1", {
+      parentId: "f2",
+      oldParentId: "f1",
+      index: 0,
+      oldIndex: 0,
+    });
+    mock.chrome.bookmarks.onChanged.emit("b1", { title: "New title" });
+    mock.chrome.bookmarks.onChildrenReordered.emit("f1", { childIds: [] });
+
+    expect(callback).toHaveBeenCalledTimes(5);
+  });
+
+  it("stops receiving events after unsubscribing", () => {
+    const callback = vi.fn();
+    const unsubscribe = subscribeToBookmarkChanges(callback);
+    unsubscribe();
+
+    mock.chrome.bookmarks.onCreated.emit("b1", node("b1", "f1"));
+
+    expect(callback).not.toHaveBeenCalled();
   });
 });
 

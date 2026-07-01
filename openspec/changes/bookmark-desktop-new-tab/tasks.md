@@ -63,8 +63,8 @@
 
 ## 9. Live Cross-Tab Sync
 
-- [ ] 9.1 Propagate layout/settings changes across open tabs via `chrome.storage.onChanged`
-- [ ] 9.2 Propagate bookmark/folder structure changes across open tabs via `chrome.bookmarks` events
+- [x] 9.1 Propagate layout/settings changes across open tabs via `chrome.storage.onChanged`
+- [x] 9.2 Propagate bookmark/folder structure changes across open tabs via `chrome.bookmarks` events
 
 ## 10. Testing
 
@@ -74,7 +74,7 @@
 - [ ] 10.4 E2E: folder selection filters canvas correctly
 - [ ] 10.5 E2E: bookmark click navigation
 - [x] 10.6 E2E: favicon fallback and custom icon upload/removal
-- [ ] 10.7 E2E: multi-tab live sync (layout and structure changes)
+- [x] 10.7 E2E: multi-tab live sync (layout and structure changes)
 - [ ] 10.8 E2E: cross-folder drag (bookmark→folder, folder→folder)
 
 ## 11. Pre-Publish Security Scan

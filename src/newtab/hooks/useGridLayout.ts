@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useDndMonitor } from "@dnd-kit/core";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { getBookmarksInFolder } from "../../lib/bookmarks/read";
+import { subscribeToBookmarkChanges } from "../../lib/bookmarks/events";
 import type { PositionUpdate } from "../../lib/grid/dragDrop";
 import { paginate } from "../../lib/grid/layout";
 import { backfillFolderPositions } from "../../lib/grid/seed";
@@ -17,8 +18,12 @@ import {
 import type { GridCapacity } from "../../lib/grid/types";
 import type { LayoutCell } from "../../lib/grid/layout";
 import { resolveGridSettings } from "../../lib/storage/gridSettings";
+import { onStorageKeysChanged } from "../../lib/storage/onChanged";
 import { setBookmarkPositions } from "../../lib/storage/positions";
-import { GLOBAL_DEFAULT_GRID_SETTINGS } from "../../lib/storage/schema";
+import {
+  GLOBAL_DEFAULT_GRID_SETTINGS,
+  STORAGE_KEYS,
+} from "../../lib/storage/schema";
 import type { FolderPositions, GridSettings } from "../../lib/storage/schema";
 import { useElementSize } from "./useElementSize";
 
@@ -114,6 +119,28 @@ export function useGridLayout(folderId: string): UseGridLayoutResult {
     };
   }, [folderId]);
 
+  // Live sync: refetch this folder's direct bookmark children on any
+  // bookmark/folder structure change, whether from this extension's own UI
+  // or Chrome's native bookmark manager, this tab or another open one.
+  // Deliberately doesn't reset previousCapacityRef — position bookkeeping
+  // (backfill/reflow/cleanup) is already handled by the background
+  // listener and arrives here separately via the storage.onChanged
+  // subscription below; this only refreshes bookmark identity data
+  // (title/url) for rendering.
+  useEffect(
+    () =>
+      subscribeToBookmarkChanges(() => {
+        void getBookmarksInFolder(folderId).then((bookmarks) => {
+          setFolderData((current) =>
+            current && current.folderId === folderId
+              ? { ...current, bookmarks }
+              : current,
+          );
+        });
+      }),
+    [folderId],
+  );
+
   const { capacity, iconSize, needsScroll } = useMemo(
     () => computeCapacityAndIconSize(settings, size.width, size.height),
     [settings, size.width, size.height],
@@ -151,6 +178,47 @@ export function useGridLayout(folderId: string): UseGridLayoutResult {
       cancelled = true;
     };
   }, [folderId, settingsLoaded, capacity, size.width, size.height]);
+
+  // Cross-tab live sync: another open new-tab page's position/gridSettings
+  // writes arrive here via chrome.storage.onChanged. Position changes are
+  // applied directly (the writing tab already resolved backfill/reflow
+  // before persisting); gridSettings/globalGridSettings changes re-resolve
+  // this folder's effective settings, which cascades into the sizing
+  // effect above.
+  useEffect(
+    () =>
+      onStorageKeysChanged(
+        [
+          STORAGE_KEYS.POSITIONS,
+          STORAGE_KEYS.GRID_SETTINGS,
+          STORAGE_KEYS.GLOBAL_GRID_SETTINGS,
+        ],
+        (changes) => {
+          const positionsChange = changes[STORAGE_KEYS.POSITIONS];
+          if (positionsChange) {
+            const newValue = positionsChange.newValue as
+              Record<string, FolderPositions> | undefined;
+            const folderPositions = newValue?.[folderId];
+            if (folderPositions) {
+              setPositions(folderPositions);
+            }
+          }
+          if (
+            STORAGE_KEYS.GRID_SETTINGS in changes ||
+            STORAGE_KEYS.GLOBAL_GRID_SETTINGS in changes
+          ) {
+            void resolveGridSettings(folderId).then((resolvedSettings) => {
+              setFolderData((current) =>
+                current && current.folderId === folderId
+                  ? { ...current, settings: resolvedSettings }
+                  : current,
+              );
+            });
+          }
+        },
+      ),
+    [folderId],
+  );
 
   // Dragging one of this folder's bookmarks onto a sidebar folder row moves
   // it via the bookmarks API (see App's shared DndContext); optimistically

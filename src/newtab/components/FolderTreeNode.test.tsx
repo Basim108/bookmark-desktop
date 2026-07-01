@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { installChromeMock } from "../../test/chromeMock";
@@ -105,5 +105,54 @@ describe("FolderTreeNode", () => {
     expect(
       await screen.findByRole("radio", { name: "Icon only" }),
     ).toBeEnabled();
+  });
+
+  it("live-updates when the folder's settings change from another tab", async () => {
+    const user = userEvent.setup();
+    renderFolderTreeNode({
+      folder: folderNode("f1", "0", "Work"),
+      activeFolderId: undefined,
+      onSelectFolder: vi.fn(),
+      depth: 0,
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Folder display settings" }),
+    );
+    expect(screen.getByRole("radio", { name: "Icon only" })).toBeDisabled();
+
+    // Simulates the setting changing via chrome.storage in another open
+    // new-tab page, not any action within this component.
+    await setFolderHasCustomIcon("f1", true);
+
+    await waitFor(() =>
+      expect(screen.getByRole("radio", { name: "Icon only" })).toBeEnabled(),
+    );
+  });
+
+  it("live-updates its subfolder list on a chrome.bookmarks structure event, without any drag", async () => {
+    const user = userEvent.setup();
+    renderFolderTreeNode({
+      folder: folderNode("f1", "0", "Work"),
+      activeFolderId: undefined,
+      onSelectFolder: vi.fn(),
+      depth: 0,
+    });
+
+    // No expand toggle yet — f1 has no subfolders.
+    expect(
+      screen.queryByRole("button", { name: "Expand folder" }),
+    ).not.toBeInTheDocument();
+
+    // Simulates a folder created via Chrome's native bookmark manager
+    // (or another open new-tab page), not a drag within this component.
+    const child = folderNode("child-1", "f1", "Personal");
+    mock.addNode(child);
+    mock.chrome.bookmarks.onCreated.emit("child-1", child);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Expand folder" }),
+    );
+    expect(await screen.findByText("Personal")).toBeInTheDocument();
   });
 });
