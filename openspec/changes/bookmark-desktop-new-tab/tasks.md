@@ -16,11 +16,11 @@
 
 ## 3. Sidebar & Folder Tree
 
-- [ ] 3.1 Build sidebar folder tree component (Chrome's native folder order)
-- [ ] 3.2 Implement folder selection → active-folder state driving canvas filtering
-- [ ] 3.3 Implement per-folder sidebar display setting (icon/label/both), independent, no inheritance
-- [ ] 3.4 Disable icon display option until folder has a custom uploaded image
-- [ ] 3.5 Validate folder name (reject empty/whitespace-only)
+- [x] 3.1 Build sidebar folder tree component (Chrome's native folder order)
+- [x] 3.2 Implement folder selection → active-folder state driving canvas filtering
+- [x] 3.3 Implement per-folder sidebar display setting (icon/label/both), independent, no inheritance
+- [x] 3.4 Disable icon display option until folder has a custom uploaded image
+- [x] 3.5 Validate folder name (reject empty/whitespace-only)
 
 ## 4. Canvas Grid & Pagination
 
