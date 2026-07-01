@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useDndMonitor } from "@dnd-kit/core";
+import type { DragEndEvent } from "@dnd-kit/core";
 import { getSubfolders } from "../../lib/bookmarks/read";
 
 interface UseSubfoldersResult {
@@ -12,14 +14,10 @@ interface LoadedState {
 }
 
 /**
- * Loads a folder's direct subfolders in Chrome's native order. Live
- * updates on bookmark structure changes are wired in Group 9; for now
- * this fetches once per folderId.
- *
- * `loading` is derived by comparing the last-loaded folderId against the
- * requested one, rather than a separate boolean set synchronously inside
- * the effect, so the only setState call happens after the async fetch
- * resolves.
+ * Loads a folder's direct subfolders in Chrome's native order, kept live
+ * across a folder-to-folder drag (see FolderTreeNode) by optimistically
+ * patching the affected side(s) locally on drop rather than waiting for a
+ * reload — full cross-tab structure sync is wired in Group 9.
  */
 export function useSubfolders(folderId: string): UseSubfoldersResult {
   const [state, setState] = useState<LoadedState>({
@@ -38,6 +36,45 @@ export function useSubfolders(folderId: string): UseSubfoldersResult {
       cancelled = true;
     };
   }, [folderId]);
+
+  useDndMonitor({
+    onDragEnd(event: DragEndEvent) {
+      const activeData = event.active.data.current as
+        { type?: string; sourceParentId?: string } | undefined;
+      const overData = event.over?.data.current as
+        { type?: string; folderId?: string } | undefined;
+      if (activeData?.type !== "folder" || overData?.type !== "folder") {
+        return;
+      }
+      if (overData.folderId === activeData.sourceParentId) {
+        return;
+      }
+      const movedFolderId = String(event.active.id);
+
+      if (activeData.sourceParentId === folderId) {
+        setState((current) =>
+          current.folderId === folderId
+            ? {
+                folderId,
+                folders: current.folders.filter((f) => f.id !== movedFolderId),
+              }
+            : current,
+        );
+      }
+
+      if (overData.folderId === folderId) {
+        void chrome.bookmarks.get(movedFolderId).then(([node]) => {
+          if (!node) return;
+          setState((current) =>
+            current.folderId === folderId &&
+            !current.folders.some((f) => f.id === movedFolderId)
+              ? { folderId, folders: [...current.folders, node] }
+              : current,
+          );
+        });
+      }
+    },
+  });
 
   const loading = state.folderId !== folderId;
   return { folders: loading ? [] : state.folders, loading };

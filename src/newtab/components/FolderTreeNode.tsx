@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { useSubfolders } from "../hooks/useSubfolders";
 import { useFolderSettings } from "../hooks/useFolderSettings";
 import { setFolderSidebarDisplay } from "../../lib/storage/folderSettings";
@@ -30,6 +32,32 @@ export function FolderTreeNode({
   const { folders: subfolders } = useSubfolders(folder.id);
   const { settings, reload } = useFolderSettings(folder.id);
 
+  // A folder row is both a drag source (moving it to another folder) and a
+  // drop target (accepting a dragged bookmark or another dragged folder) —
+  // the same node uses both hooks, combining their refs below.
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setDragRef,
+    transform,
+    isDragging,
+  } = useDraggable({
+    id: folder.id,
+    data: {
+      type: "folder",
+      folderId: folder.id,
+      sourceParentId: folder.parentId,
+    },
+  });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: folder.id,
+    data: { type: "folder", folderId: folder.id },
+  });
+  function setFolderRowRef(node: HTMLButtonElement | null) {
+    setDragRef(node);
+    setDropRef(node);
+  }
+
   const display = resolveFolderDisplay(settings);
   const isActive = activeFolderId === folder.id;
   const hasChildren = subfolders.length > 0;
@@ -59,10 +87,14 @@ export function FolderTreeNode({
         )}
 
         <button
+          ref={setFolderRowRef}
           type="button"
-          className="folder-select"
+          className={`folder-select${isOver ? " folder-select--over" : ""}${isDragging ? " folder-select--dragging" : ""}`}
           onClick={() => onSelectFolder(folder.id)}
           title={display === "icon-only" ? folder.title : undefined}
+          style={{ transform: CSS.Translate.toString(transform) }}
+          {...listeners}
+          {...attributes}
         >
           {display !== "label-only" && (
             <CustomIconImage itemId={folder.id} alt={folder.title} />
