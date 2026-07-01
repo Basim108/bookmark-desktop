@@ -1,10 +1,10 @@
 ## 1. Project & Extension Setup
 
-- [ ] 1.1 Scaffold Manifest V3 extension project (TypeScript, Vite + `@crxjs/vite-plugin`)
-- [ ] 1.2 Configure manifest: new-tab override, `bookmarks`/`storage`/`favicon` permissions only
-- [ ] 1.3 Set up ESLint + Prettier with pre-commit hooks (Husky + lint-staged)
-- [ ] 1.4 Set up Vitest for unit tests and Playwright for e2e (unpacked-extension launch)
-- [ ] 1.5 Set up CI pipeline (typecheck, lint, unit, e2e) gating merges
+- [x] 1.1 Scaffold Manifest V3 extension project (TypeScript, Vite + `@crxjs/vite-plugin`)
+- [x] 1.2 Configure manifest: new-tab override, `bookmarks`/`storage`/`favicon` permissions only
+- [x] 1.3 Set up ESLint + Prettier with pre-commit hooks (Husky + lint-staged)
+- [x] 1.4 Set up Vitest for unit tests and Playwright for e2e (unpacked-extension launch)
+- [x] 1.5 Set up CI pipeline (typecheck, lint, unit, e2e) gating merges
 
 ## 2. Bookmark Data Layer
 
