@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Canvas } from "./components/Canvas";
 import { Sidebar } from "./components/Sidebar";
 import { useSubfolders } from "./hooks/useSubfolders";
 
@@ -23,10 +24,11 @@ export function App() {
         activeFolderId={activeFolderId}
         onSelectFolder={setSelectedFolderId}
       />
-      <main className="canvas">
-        {/* Grid/pagination is implemented in Group 4. */}
-        <p>Selected folder: {activeFolderId ?? "none"}</p>
-      </main>
+      {activeFolderId ? (
+        <Canvas folderId={activeFolderId} />
+      ) : (
+        <p className="canvas-empty">No bookmark folders found.</p>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { installChromeMock } from "../test/chromeMock";
@@ -19,14 +19,16 @@ beforeEach(() => {
 });
 
 describe("App", () => {
-  it("selects the first root folder by default and shows it in the canvas", async () => {
+  it("selects the first root folder by default and renders its canvas", async () => {
     mock.addNode(folderNode("1", "0", "Bookmarks Bar"));
     mock.addNode(folderNode("2", "0", "Other Bookmarks"));
 
     render(<App />);
 
     expect(await screen.findByText("Bookmarks Bar")).toBeInTheDocument();
-    expect(await screen.findByText(/Selected folder: 1/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.querySelector('[data-folder-id="1"]')).toBeTruthy();
+    });
   });
 
   it("switches the selected folder when a different sidebar folder is clicked", async () => {
@@ -35,12 +37,17 @@ describe("App", () => {
     const user = userEvent.setup();
 
     render(<App />);
+    await waitFor(() => {
+      expect(document.querySelector('[data-folder-id="1"]')).toBeTruthy();
+    });
 
     const otherFolderButton = await screen.findByRole("button", {
       name: "Other Bookmarks",
     });
     await user.click(otherFolderButton);
 
-    expect(await screen.findByText(/Selected folder: 2/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.querySelector('[data-folder-id="2"]')).toBeTruthy();
+    });
   });
 });
