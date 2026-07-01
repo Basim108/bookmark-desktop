@@ -40,6 +40,26 @@ export async function setBookmarkPosition(
   });
 }
 
+/**
+ * Applies multiple position updates in one read-modify-write. Required
+ * for anything that changes more than one bookmark's position at once
+ * (e.g. a drag-and-drop swap) — applying such updates via separate
+ * setBookmarkPosition calls races two independent read-modify-writes
+ * against the same storage key, and the second call's write can clobber
+ * the first's change since it started from a stale snapshot.
+ */
+export async function setBookmarkPositions(
+  folderId: string,
+  updates: { bookmarkId: string; cell: GridCell }[],
+): Promise<void> {
+  const folderPositions = await getFolderPositions(folderId);
+  const next = { ...folderPositions };
+  for (const update of updates) {
+    next[update.bookmarkId] = update.cell;
+  }
+  await setFolderPositions(folderId, next);
+}
+
 export async function removeBookmarkPosition(
   folderId: string,
   bookmarkId: string,
