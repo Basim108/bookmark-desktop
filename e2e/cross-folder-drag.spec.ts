@@ -1,3 +1,4 @@
+import type { Locator } from "@playwright/test";
 import { test, expect } from "./fixtures";
 
 interface StoredPositions {
@@ -16,6 +17,22 @@ async function dragBetween(
   await page.mouse.down();
   await page.mouse.move(to.x, to.y, { steps: 10 });
   await page.mouse.up();
+}
+
+/**
+ * Clicks `trigger` and waits for `target` to appear, retrying the click if
+ * it doesn't. Guards against a rare click-vs-React-render race right after
+ * a drag: Playwright's actionability check and a React state update (e.g.
+ * a sidebar row's "has children" flipping true right as it's clicked) can
+ * land in the same tick, so the click registers but has no effect. Safe to
+ * retry here since both call sites either re-select an already-selected
+ * folder (idempotent) or re-click a still-collapsed expand toggle.
+ */
+async function clickUntilVisible(trigger: Locator, target: Locator) {
+  await expect(async () => {
+    await trigger.click();
+    await expect(target).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 10_000 });
 }
 
 test("dragging a bookmark onto a sidebar folder moves it there", async ({
@@ -107,8 +124,7 @@ test("dragging a bookmark onto a sidebar folder moves it there", async ({
     .toEqual({ page: 0, row: 0, col: 0 });
 
   // Navigating to folder B shows the bookmark there.
-  await folderBButton.click();
-  await expect(page.getByText("Cross Drag Bookmark")).toBeVisible();
+  await clickUntilVisible(folderBButton, page.getByText("Cross Drag Bookmark"));
 });
 
 test("dragging a folder row onto another folder row reparents it", async ({
@@ -182,8 +198,8 @@ test("dragging a folder row onto another folder row reparents it", async ({
   const folderDRow = page.locator(".folder-row", {
     has: folderDButton,
   });
-  await folderDRow.getByRole("button", { name: "Expand folder" }).click();
-  await expect(
+  await clickUntilVisible(
+    folderDRow.getByRole("button", { name: "Expand folder" }),
     page.getByRole("button", { name: "Cross Drag Folder C", exact: true }),
-  ).toBeVisible();
+  );
 });

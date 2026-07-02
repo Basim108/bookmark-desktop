@@ -15,10 +15,18 @@ interface LoadedState {
 }
 
 /**
- * Loads a folder's direct subfolders in Chrome's native order, kept live
- * across a folder-to-folder drag (see FolderTreeNode) by optimistically
- * patching the affected side(s) locally on drop rather than waiting for a
- * reload — full cross-tab structure sync is wired in Group 9.
+ * Loads a folder's direct subfolders in Chrome's native order. A
+ * folder-to-folder drag (see FolderTreeNode) removes the moved folder from
+ * the source's list immediately (a synchronous local filter, so it's safe
+ * to do optimistically); the destination picking it up relies solely on
+ * the live-sync refetch below, triggered by the real chrome.bookmarks.onMoved
+ * event. An earlier version also optimistically appended it to the
+ * destination via an async chrome.bookmarks.get() call, racing the refetch
+ * — whichever settled last won, and under a loaded CI runner the refetch
+ * could occasionally resolve with stale data (Chrome's own bookmark store
+ * lagging just behind the event it fires) and clobber the correct
+ * optimistic state with nothing to re-trigger a retry. One writer avoids
+ * the race entirely.
  */
 export function useSubfolders(folderId: string): UseSubfoldersResult {
   const [state, setState] = useState<LoadedState>({
@@ -71,18 +79,6 @@ export function useSubfolders(folderId: string): UseSubfoldersResult {
               }
             : current,
         );
-      }
-
-      if (overData.folderId === folderId) {
-        void chrome.bookmarks.get(movedFolderId).then(([node]) => {
-          if (!node) return;
-          setState((current) =>
-            current.folderId === folderId &&
-            !current.folders.some((f) => f.id === movedFolderId)
-              ? { folderId, folders: [...current.folders, node] }
-              : current,
-          );
-        });
       }
     },
   });
