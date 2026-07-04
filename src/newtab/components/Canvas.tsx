@@ -35,6 +35,9 @@ export function Canvas({ folderId }: CanvasProps) {
   } = useGridLayout(folderId);
 
   const page = pages[currentPage] ?? [];
+  const entryByCellKey = new Map(
+    page.map((entry) => [cellKey(entry.cell.row, entry.cell.col), entry]),
+  );
   const hasMultiplePages = pages.length > 1;
   const canGoPrev = currentPage > 0;
   const canGoNext = currentPage < pages.length - 1;
@@ -94,9 +97,7 @@ export function Canvas({ folderId }: CanvasProps) {
           >
             {Array.from({ length: capacity.rows }, (_, row) =>
               Array.from({ length: capacity.cols }, (_, col) => {
-                const entry = page.find(
-                  (e) => e.cell.row === row && e.cell.col === col,
-                );
+                const entry = entryByCellKey.get(cellKey(row, col));
                 const bookmark = entry
                   ? bookmarksById.get(entry.bookmarkId)
                   : undefined;

@@ -13,10 +13,10 @@ command -v npm >/dev/null 2>&1 || { echo "npm is required" >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "python3 is required" >&2; exit 1; }
 
 log "Installing claude-code"
-npm install -g --no-audit --no-fund @anthropic-ai/claude-code
+npm install -g --no-audit --no-fund @anthropic-ai/claude-code@2.1.201
 
 log "Installing openspec"
-npm install -g --no-audit --no-fund @fission-ai/openspec@latest
+npm install -g --no-audit --no-fund @fission-ai/openspec@1.5.0
 
 log "Installing project dependencies"
 npm install --no-fund
@@ -38,4 +38,4 @@ export PIPX_BIN_DIR="$HOME/.local/bin"
 pipx ensurepath
 
 log "Installing Semgrep (SEC-11.3 dangerous-function/pattern scan; see SECURITY.md)"
-pipx install --force semgrep
+pipx install --force "semgrep==1.168.0"

@@ -6,6 +6,10 @@ import {
   removeBookmarkPosition,
   setBookmarkPosition,
 } from "../storage/positions";
+import { removeBookmarkSettings } from "../storage/bookmarkSettings";
+import { removeFolderSettings } from "../storage/folderSettings";
+import { clearGridSettingsOverride } from "../storage/gridSettings";
+import { deleteIcon } from "../storage/iconDb";
 import { isBookmark } from "./read";
 
 const mutex = createMutex();
@@ -16,15 +20,30 @@ async function placeNewBookmark(folderId: string, bookmarkId: string) {
   await setBookmarkPosition(folderId, bookmarkId, cell);
 }
 
-/** Recursively removes stored positions for a removed node and, if it was a folder, every bookmark nested inside it. */
+/**
+ * Recursively removes stored positions, settings, grid overrides, and any
+ * custom-icon blob for a removed node and, if it was a folder, every
+ * bookmark/subfolder nested inside it — otherwise this per-item data is
+ * orphaned forever in chrome.storage.local/IndexedDB with no way for the
+ * user to reclaim it.
+ */
 async function cleanUpRemovedSubtree(
   node: chrome.bookmarks.BookmarkTreeNode,
   parentId: string,
 ) {
   if (isBookmark(node)) {
-    await removeBookmarkPosition(parentId, node.id);
+    await Promise.all([
+      removeBookmarkPosition(parentId, node.id),
+      removeBookmarkSettings(node.id),
+      deleteIcon(node.id),
+    ]);
     return;
   }
+  await Promise.all([
+    removeFolderSettings(node.id),
+    clearGridSettingsOverride(node.id),
+    deleteIcon(node.id),
+  ]);
   for (const child of node.children ?? []) {
     await cleanUpRemovedSubtree(child, node.id);
   }
@@ -105,6 +124,8 @@ export function registerBookmarkListeners(): void {
   });
 }
 
+const localChangeSubscribers = new Set<() => void>();
+
 /**
  * Subscribes to any chrome.bookmarks structure event — create, remove,
  * move, title/url change, or native reorder — regardless of whether it
@@ -115,16 +136,33 @@ export function registerBookmarkListeners(): void {
  * Returns an unsubscribe function.
  */
 export function subscribeToBookmarkChanges(callback: () => void): () => void {
+  localChangeSubscribers.add(callback);
   chrome.bookmarks.onCreated.addListener(callback);
   chrome.bookmarks.onRemoved.addListener(callback);
   chrome.bookmarks.onMoved.addListener(callback);
   chrome.bookmarks.onChanged.addListener(callback);
   chrome.bookmarks.onChildrenReordered.addListener(callback);
   return () => {
+    localChangeSubscribers.delete(callback);
     chrome.bookmarks.onCreated.removeListener(callback);
     chrome.bookmarks.onRemoved.removeListener(callback);
     chrome.bookmarks.onMoved.removeListener(callback);
     chrome.bookmarks.onChanged.removeListener(callback);
     chrome.bookmarks.onChildrenReordered.removeListener(callback);
   };
+}
+
+/**
+ * Forces every subscribeToBookmarkChanges listener to refetch, without a
+ * real chrome.bookmarks event. Used after a chrome.bookmarks.move call is
+ * known to have been rejected (e.g. a folder-cycle or protected-root move) —
+ * Chrome fires no onMoved event on rejection, so optimistic local UI state
+ * (e.g. useSubfolders' immediate removal of the dragged folder) would
+ * otherwise be left inconsistent with the real, unchanged bookmark tree
+ * until an unrelated structure event happened to resync it.
+ */
+export function forceBookmarkResync(): void {
+  for (const callback of localChangeSubscribers) {
+    callback();
+  }
 }

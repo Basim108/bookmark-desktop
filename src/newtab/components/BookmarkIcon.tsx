@@ -6,6 +6,7 @@ import {
   setBookmarkHasCustomIcon,
   setBookmarkLabelDisplay,
 } from "../../lib/storage/bookmarkSettings";
+import { isSafeNavigationUrl } from "../../lib/bookmarks/urlSafety";
 import type { BookmarkLabelDisplay } from "../../lib/storage/schema";
 import { CustomIconImage } from "./CustomIconImage";
 import { FaviconImage } from "./FaviconImage";
@@ -44,7 +45,7 @@ export function BookmarkIcon({ bookmark, size, folderId }: BookmarkIconProps) {
   const tooltipOnly = settings.labelDisplay === "tooltip";
 
   function handleClick() {
-    if (bookmark.url) {
+    if (bookmark.url && isSafeNavigationUrl(bookmark.url)) {
       window.location.assign(bookmark.url);
     }
   }

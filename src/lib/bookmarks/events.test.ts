@@ -1,10 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { installChromeMock } from "../../test/chromeMock";
 import {
+  forceBookmarkResync,
   registerBookmarkListeners,
   subscribeToBookmarkChanges,
 } from "./events";
 import { getFolderPositions } from "../storage/positions";
+import {
+  getBookmarkSettings,
+  setBookmarkHasCustomIcon,
+} from "../storage/bookmarkSettings";
+import {
+  getFolderSettings,
+  setFolderHasCustomIcon,
+} from "../storage/folderSettings";
+import {
+  getGridSettingsOverride,
+  setGridSettingsOverride,
+} from "../storage/gridSettings";
+import { getIcon, putIcon } from "../storage/iconDb";
+import { GLOBAL_DEFAULT_GRID_SETTINGS } from "../storage/schema";
 
 const mock = installChromeMock();
 
@@ -39,10 +54,14 @@ function folderNode(
   };
 }
 
-function flush() {
-  // Listeners fire storage work asynchronously (via the mutex); let those
-  // microtasks settle before asserting.
-  return new Promise((resolve) => setTimeout(resolve, 0));
+async function flush() {
+  // Listeners fire storage/IndexedDB work asynchronously (via the mutex);
+  // let those settle before asserting. IndexedDB callbacks (deleteIcon)
+  // resolve over multiple event-loop turns, so a single setTimeout(0)
+  // isn't always enough — loop a few turns to be safe.
+  for (let i = 0; i < 5; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
 }
 
 beforeEach(() => {
@@ -117,6 +136,84 @@ describe("onRemoved", () => {
 
     expect(await getFolderPositions("f1")).toEqual({});
     expect(await getFolderPositions("f2")).toEqual({});
+  });
+
+  it("discards a removed bookmark's settings and custom icon", async () => {
+    await setBookmarkHasCustomIcon("b1", true);
+    await putIcon("b1", new Blob(["x"], { type: "image/png" }));
+
+    mock.chrome.bookmarks.onRemoved.emit("b1", {
+      parentId: "folder-1",
+      index: 0,
+      node: node("b1", "folder-1"),
+    });
+    await flush();
+
+    expect(await getBookmarkSettings("b1")).toEqual({
+      labelDisplay: "under-icon",
+      hasCustomIcon: false,
+    });
+    expect(await getIcon("b1")).toBeUndefined();
+  });
+
+  it("discards a removed folder's settings, grid override, and custom icon", async () => {
+    await setFolderHasCustomIcon("f1", true);
+    await setGridSettingsOverride("f1", GLOBAL_DEFAULT_GRID_SETTINGS);
+    await putIcon("f1", new Blob(["x"], { type: "image/png" }));
+
+    mock.chrome.bookmarks.onRemoved.emit("f1", {
+      parentId: "folder-1",
+      index: 0,
+      node: folderNode("f1", "folder-1"),
+    });
+    await flush();
+
+    expect(await getFolderSettings("f1")).toEqual({
+      sidebarDisplay: "label-only",
+      hasCustomIcon: false,
+    });
+    expect(await getGridSettingsOverride("f1")).toBeUndefined();
+    expect(await getIcon("f1")).toBeUndefined();
+  });
+
+  it("recursively discards settings for every bookmark nested inside a removed folder", async () => {
+    await setBookmarkHasCustomIcon("b1", true);
+
+    const removedFolder = folderNode("f1", "folder-1", {
+      children: [node("b1", "f1")],
+    });
+    mock.chrome.bookmarks.onRemoved.emit("f1", {
+      parentId: "folder-1",
+      index: 0,
+      node: removedFolder,
+    });
+    await flush();
+
+    expect(await getBookmarkSettings("b1")).toEqual({
+      labelDisplay: "under-icon",
+      hasCustomIcon: false,
+    });
+  });
+});
+
+describe("forceBookmarkResync", () => {
+  it("invokes every subscribeToBookmarkChanges listener", () => {
+    const callback = vi.fn();
+    subscribeToBookmarkChanges(callback);
+
+    forceBookmarkResync();
+
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not invoke listeners that have unsubscribed", () => {
+    const callback = vi.fn();
+    const unsubscribe = subscribeToBookmarkChanges(callback);
+    unsubscribe();
+
+    forceBookmarkResync();
+
+    expect(callback).not.toHaveBeenCalled();
   });
 });
 

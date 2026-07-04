@@ -27,11 +27,7 @@
       }
     }
   },
-  "forwardPorts": [
-    3000,
-    5173,
-    8080
-  ],
+  "forwardPorts": [5173],
   "mounts": [
     "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind"
   ],

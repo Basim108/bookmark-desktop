@@ -11,6 +11,7 @@ import { Sidebar } from "./components/Sidebar";
 import { useSubfolders } from "./hooks/useSubfolders";
 import { moveNodeToFolder } from "../lib/bookmarks/move";
 import { resolveCrossFolderDrop } from "../lib/bookmarks/dragResolve";
+import { forceBookmarkResync } from "../lib/bookmarks/events";
 
 /** Chrome's bookmark tree root id — parent of the top-level folders (Bookmarks Bar, Other Bookmarks, etc.). */
 const ROOT_FOLDER_ID = "0";
@@ -24,8 +25,8 @@ export function App() {
   // is resolved here since it's the one ancestor shared by both the sidebar
   // and the canvas. Within-canvas cell drops are resolved locally by Canvas
   // itself via useDndMonitor.
-  function handleDragEnd(event: DragEndEvent) {
-    const action = resolveCrossFolderDrop(
+  async function handleDragEnd(event: DragEndEvent) {
+    const action = await resolveCrossFolderDrop(
       String(event.active.id),
       event.active.data.current as
         | { type?: string; sourceFolderId?: string; sourceParentId?: string }
@@ -36,7 +37,16 @@ export function App() {
     if (!action) return;
     const nodeId =
       action.kind === "move-bookmark" ? action.bookmarkId : action.folderId;
-    void moveNodeToFolder(nodeId, action.destFolderId);
+    try {
+      await moveNodeToFolder(nodeId, action.destFolderId);
+    } catch {
+      // chrome.bookmarks.move rejected (e.g. a case resolveCrossFolderDrop's
+      // guards didn't anticipate). No onMoved event will fire, so force a
+      // resync to correct any optimistic local state (e.g. useSubfolders'
+      // synchronous removal of the dragged folder) back to the real,
+      // unchanged bookmark tree.
+      forceBookmarkResync();
+    }
   }
 
   return (

@@ -91,7 +91,13 @@ a future submission changes the extension's identity, breaking existing
 installs' update path.
 
 - Store it in a password manager / secrets vault (1Password, Bitwarden,
-  etc.), not in the repo, not in Slack/email.
+  etc.), not in the repo, not in Slack/email. "Not in the repo" means the
+  working tree too, not just git history: `security/` is gitignored so
+  packing won't accidentally commit it, but the file still sits on disk
+  where any process running in this workspace (an `npm install` lifecycle
+  script, an editor extension, etc.) can read it. Move it to the vault and
+  delete it from `security/` right after packing — don't leave it there
+  between submissions.
 - If you later want CI to pack (or publish) releases automatically,
   base64-encode the `.pem` and add it as a GitHub Actions secret (e.g.
   `CRX_SIGNING_KEY`), then decode it into a temp file in the workflow

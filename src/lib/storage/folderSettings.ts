@@ -56,6 +56,16 @@ export async function setFolderSidebarDisplay(
   });
 }
 
+/** Discards a folder's stored settings entirely, e.g. when it's removed. */
+export async function removeFolderSettings(folderId: string): Promise<void> {
+  const all = await getAllFolderSettings();
+  if (!(folderId in all)) {
+    return;
+  }
+  const { [folderId]: _removed, ...rest } = all;
+  await setStorageValue(STORAGE_KEYS.FOLDER_SETTINGS, rest);
+}
+
 /** Used by Group 7 when a custom icon is uploaded/removed to keep this metadata mirror in sync. */
 export async function setFolderHasCustomIcon(
   folderId: string,
