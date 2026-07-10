@@ -59,6 +59,8 @@ export interface StorageSchema {
   bookmarkSettings: Record<string, BookmarkSettings>;
   /** folderId -> sidebar display settings */
   folderSettings: Record<string, FolderSettings>;
+  /** User-resized sidebar width in px. */
+  sidebarWidth: number;
 }
 
 export const STORAGE_KEYS = {
@@ -67,4 +69,5 @@ export const STORAGE_KEYS = {
   GLOBAL_GRID_SETTINGS: "globalGridSettings",
   BOOKMARK_SETTINGS: "bookmarkSettings",
   FOLDER_SETTINGS: "folderSettings",
+  SIDEBAR_WIDTH: "sidebarWidth",
 } as const satisfies Record<string, keyof StorageSchema>;

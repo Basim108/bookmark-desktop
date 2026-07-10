@@ -19,10 +19,34 @@ body {
 }
 
 .sidebar {
-  width: 240px;
+  position: relative;
+  min-width: 40px;
   flex-shrink: 0;
-  overflow-y: auto;
   border-right: 1px solid light-dark(#ddd, #333);
+}
+
+.sidebar-scroll-area {
+  height: 100%;
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.sidebar-scroll-area::-webkit-scrollbar {
+  display: none;
+}
+
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sidebar--resizing {
+  user-select: none;
 }
 
 .canvas {
