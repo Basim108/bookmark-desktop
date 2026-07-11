@@ -11,7 +11,7 @@ interface IconUploadControlsProps {
 
 /**
  * Shared upload/remove UI for a bookmark's or folder's custom icon.
- * Validation (magic-byte format sniffing, size/dimension caps) happens in
+ * Validation (magic-byte format sniffing, file size cap) happens in
  * uploadIcon; a rejected file surfaces an inline error instead of being
  * applied. The item's hasCustomIcon metadata is the caller's
  * responsibility to persist via onChange (bookmarkSettings/folderSettings

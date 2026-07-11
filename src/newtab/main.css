@@ -210,6 +210,18 @@ body {
   opacity: 0.5;
 }
 
+.folder-select .custom-icon {
+  width: 24px;
+  height: 24px;
+}
+
+@media (min-width: 1024px) {
+  .folder-select .custom-icon {
+    width: 32px;
+    height: 32px;
+  }
+}
+
 .folder-row {
   position: relative;
 }

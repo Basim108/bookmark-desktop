@@ -1,10 +1,8 @@
 export const MAX_ICON_FILE_SIZE_BYTES = 1_000_000; // 1 MB
-export const MAX_ICON_DIMENSION_PX = 512;
 
 export type AcceptedIconFormat = "png" | "jpeg" | "webp" | "avif";
 
-export type IconValidationError =
-  "unsupported-format" | "file-too-large" | "dimensions-too-large";
+export type IconValidationError = "unsupported-format" | "file-too-large";
 
 export interface IconValidationResult {
   ok: boolean;
@@ -62,26 +60,22 @@ export function sniffIconFormat(
   return SIGNATURES.find((signature) => signature.matches(bytes))?.format;
 }
 
-/** Returns undefined if the browser can't actually decode the bytes — e.g. a file with a matching magic-byte header that's otherwise truncated or corrupted. */
-async function readImageDimensions(
-  blob: Blob,
-): Promise<{ width: number; height: number } | undefined> {
+/** Returns false if the browser can't actually decode the bytes — e.g. a file with a matching magic-byte header that's otherwise truncated or corrupted. */
+async function canDecodeImage(blob: Blob): Promise<boolean> {
   try {
     const bitmap = await createImageBitmap(blob);
-    try {
-      return { width: bitmap.width, height: bitmap.height };
-    } finally {
-      bitmap.close();
-    }
+    bitmap.close();
+    return true;
   } catch {
-    return undefined;
+    return false;
   }
 }
 
 /**
- * Full upload-validation pipeline for a user-selected icon file. Order is
- * deliberate: file size and a magic-byte header check are cheap and run
- * before the pixel-dimension check, which requires a full image decode.
+ * Full upload-validation pipeline for a user-selected icon file. File size
+ * and a magic-byte header check are cheap and run before the decode check,
+ * which requires fully decoding the image. Pixel dimensions are unbounded —
+ * every rendering site scales the icon down to fit its own display size.
  */
 export async function validateIconFile(
   file: File,
@@ -96,15 +90,8 @@ export async function validateIconFile(
     return { ok: false, error: "unsupported-format" };
   }
 
-  const dimensions = await readImageDimensions(file);
-  if (!dimensions) {
+  if (!(await canDecodeImage(file))) {
     return { ok: false, error: "unsupported-format" };
-  }
-  if (
-    dimensions.width > MAX_ICON_DIMENSION_PX ||
-    dimensions.height > MAX_ICON_DIMENSION_PX
-  ) {
-    return { ok: false, error: "dimensions-too-large" };
   }
 
   return { ok: true };

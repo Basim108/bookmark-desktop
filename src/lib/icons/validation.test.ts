@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  MAX_ICON_DIMENSION_PX,
   MAX_ICON_FILE_SIZE_BYTES,
   sniffIconFormat,
   validateIconFile,
@@ -60,7 +59,7 @@ describe("sniffIconFormat", () => {
 });
 
 describe("validateIconFile", () => {
-  it("accepts a valid PNG within size and dimension limits", async () => {
+  it("accepts a valid PNG within the file size limit", async () => {
     stubImageBitmap(64, 64);
     const result = await validateIconFile(makeFile(PNG_HEADER));
     expect(result).toEqual({ ok: true });
@@ -83,14 +82,8 @@ describe("validateIconFile", () => {
     expect(result).toEqual({ ok: false, error: "file-too-large" });
   });
 
-  it("rejects a file exceeding the max pixel dimensions", async () => {
-    stubImageBitmap(MAX_ICON_DIMENSION_PX + 1, 64);
-    const result = await validateIconFile(makeFile(PNG_HEADER));
-    expect(result).toEqual({ ok: false, error: "dimensions-too-large" });
-  });
-
-  it("accepts a file exactly at the max pixel dimensions", async () => {
-    stubImageBitmap(MAX_ICON_DIMENSION_PX, MAX_ICON_DIMENSION_PX);
+  it("accepts a file with pixel dimensions far above the old 512×512 cap", async () => {
+    stubImageBitmap(4000, 4000);
     const result = await validateIconFile(makeFile(PNG_HEADER));
     expect(result).toEqual({ ok: true });
   });

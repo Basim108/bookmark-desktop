@@ -22,7 +22,7 @@ The system SHALL set the canvas's active folder to whichever folder the user sel
 - **THEN** the canvas becomes filtered to that folder's direct bookmark children
 
 ### Requirement: Folder Sidebar Display Setting
-The system SHALL allow each folder to independently configure its sidebar row display as icon-only, label-only, or both icon and label, with no inheritance from other folders, presented in a popup anchored to that folder's settings toggle button rather than as an inline panel that reflows sibling or descendant rows. The icon display option SHALL be unavailable until the folder has a custom uploaded image. Folder names SHALL NOT be empty or consist only of whitespace. The popup SHALL close when the user clicks outside it or presses the Escape key, and SHALL allow only one folder's settings popup to be open at a time across the sidebar. When the folder has a custom uploaded image, the popup SHALL display a preview of that image sized according to the browser window's viewport width — 32px below 1024px, 48px from 1024px up to (but not including) 1600px, and 64px at 1600px and above.
+The system SHALL allow each folder to independently configure its sidebar row display as icon-only, label-only, or both icon and label, with no inheritance from other folders, presented in a popup anchored to that folder's settings toggle button rather than as an inline panel that reflows sibling or descendant rows. The icon display option SHALL be unavailable until the folder has a custom uploaded image. Folder names SHALL NOT be empty or consist only of whitespace. The popup SHALL close when the user clicks outside it or presses the Escape key, and SHALL allow only one folder's settings popup to be open at a time across the sidebar. When the folder has a custom uploaded image, the popup SHALL display a preview of that image sized according to the browser window's viewport width — 32px below 1024px, 48px from 1024px up to (but not including) 1600px, and 64px at 1600px and above. When a folder's sidebar row displays its custom icon (icon-only or icon+label mode), the row's icon SHALL be sized according to the browser window's viewport width — 24px below 1024px and 32px at 1024px and above — independent of and unaffected by the popup preview's sizing.
 
 #### Scenario: Icon display unavailable without a custom image
 - **WHEN** a folder has no custom uploaded image
@@ -71,6 +71,18 @@ The system SHALL allow each folder to independently configure its sidebar row di
 #### Scenario: Icon preview sized 64px on ultra-large screens
 - **WHEN** the settings popup is open with an icon preview and the browser window's viewport width is at least 1600px
 - **THEN** the preview renders at 64px
+
+#### Scenario: Sidebar row icon sized 24px on small screens
+- **WHEN** a folder's sidebar row displays its custom icon and the browser window's viewport width is below 1024px
+- **THEN** the row's icon renders at 24px
+
+#### Scenario: Sidebar row icon sized 32px at and above the breakpoint
+- **WHEN** a folder's sidebar row displays its custom icon and the browser window's viewport width is at least 1024px
+- **THEN** the row's icon renders at 32px
+
+#### Scenario: Sidebar row icon size is independent of the popup preview
+- **WHEN** the browser window's viewport width is at least 1600px
+- **THEN** a folder's sidebar row icon renders at 32px, not the 64px used by the settings popup preview at that width
 
 ### Requirement: Folder-to-Folder Drag Nesting
 The system SHALL allow dragging one folder onto another within the sidebar to reparent it via the `chrome.bookmarks` API, and SHALL leave the stored canvas positions of the moved folder's own bookmarks and nested folders unchanged. The system SHALL reject the drop without calling the API if it would create a cycle (dropping a folder onto itself or one of its own descendants) or would move a protected root folder (e.g. Bookmarks Bar, Other Bookmarks). If the API move is attempted and rejected for any other reason, the system SHALL resync the sidebar to match the actual bookmark tree instead of leaving the optimistic UI state stale.
