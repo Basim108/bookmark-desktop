@@ -1,20 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { computeGridCapacity, resolveTierIconSize } from "./sizing";
+import { computeGridCapacity, resolveTier } from "./sizing";
 
-describe("resolveTierIconSize", () => {
-  it("returns 80px below the 1660px breakpoint", () => {
-    expect(resolveTierIconSize(0)).toBe(80);
-    expect(resolveTierIconSize(1659)).toBe(80);
+describe("resolveTier", () => {
+  it("returns the 80px/0.75rem tier below the 1660px breakpoint", () => {
+    expect(resolveTier(0)).toEqual({ iconSize: 80, labelFontSize: "0.75rem" });
+    expect(resolveTier(1659)).toEqual({
+      iconSize: 80,
+      labelFontSize: "0.75rem",
+    });
   });
 
-  it("returns 106px from 1660px up to (not including) 2100px", () => {
-    expect(resolveTierIconSize(1660)).toBe(106);
-    expect(resolveTierIconSize(2099)).toBe(106);
+  it("returns the 106px/0.85rem tier from 1660px up to (not including) 2100px", () => {
+    expect(resolveTier(1660)).toEqual({
+      iconSize: 106,
+      labelFontSize: "0.85rem",
+    });
+    expect(resolveTier(2099)).toEqual({
+      iconSize: 106,
+      labelFontSize: "0.85rem",
+    });
   });
 
-  it("returns 166px at 2100px and wider", () => {
-    expect(resolveTierIconSize(2100)).toBe(166);
-    expect(resolveTierIconSize(3000)).toBe(166);
+  it("returns the 166px/1rem tier at 2100px and wider", () => {
+    expect(resolveTier(2100)).toEqual({
+      iconSize: 166,
+      labelFontSize: "1rem",
+    });
+    expect(resolveTier(3000)).toEqual({
+      iconSize: 166,
+      labelFontSize: "1rem",
+    });
   });
 });
 

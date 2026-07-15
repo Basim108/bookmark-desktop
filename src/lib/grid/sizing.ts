@@ -8,19 +8,33 @@ const SMALL_ICON_SIZE = 80;
 const MEDIUM_ICON_SIZE = 106;
 const LARGE_ICON_SIZE = 166;
 
+const SMALL_LABEL_FONT_SIZE = "0.75rem";
+const MEDIUM_LABEL_FONT_SIZE = "0.85rem";
+const LARGE_LABEL_FONT_SIZE = "1rem";
+
+export interface GridTier {
+  iconSize: number;
+  labelFontSize: string;
+}
+
 /**
- * Icon size is a fixed step function of the canvas's own available width —
- * not configurable, not interpolated between tiers. Mirrors the style of
- * useSidebarResize's getMaxWidthForViewport.
+ * Icon size and label font-size are a fixed step function of the canvas's
+ * own available width — not configurable, not interpolated between tiers.
+ * Mirrors the style of useSidebarResize's getMaxWidthForViewport. Resolved
+ * together (rather than via two parallel lookups) so the two values can
+ * never drift out of sync with each other.
  */
-export function resolveTierIconSize(availableWidth: number): number {
+export function resolveTier(availableWidth: number): GridTier {
   if (availableWidth < MEDIUM_BREAKPOINT) {
-    return SMALL_ICON_SIZE;
+    return { iconSize: SMALL_ICON_SIZE, labelFontSize: SMALL_LABEL_FONT_SIZE };
   }
   if (availableWidth < LARGE_BREAKPOINT) {
-    return MEDIUM_ICON_SIZE;
+    return {
+      iconSize: MEDIUM_ICON_SIZE,
+      labelFontSize: MEDIUM_LABEL_FONT_SIZE,
+    };
   }
-  return LARGE_ICON_SIZE;
+  return { iconSize: LARGE_ICON_SIZE, labelFontSize: LARGE_LABEL_FONT_SIZE };
 }
 
 /**

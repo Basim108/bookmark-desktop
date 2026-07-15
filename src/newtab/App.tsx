@@ -71,9 +71,19 @@ function AppContent() {
   // sidebar's max-width tiers, reusing the same ResizeObserver pattern
   // useGridLayout already uses for the canvas instead of a window listener.
   const { ref: appRef, size: appSize } = useElementSize<HTMLDivElement>();
+  // Mirrors the canvas's own tier-resolved label font-size (reported by
+  // Canvas, which measures itself independently of .app/sidebar width) so
+  // the sidebar's folder labels can share it via inheritance. Defaults to
+  // the smallest tier's value, matching resolveTier's own first branch, so
+  // the CSS variable is never unset before a canvas has mounted/reported.
+  const [labelFontSize, setLabelFontSize] = useState("0.75rem");
 
   return (
-    <div className="app" ref={appRef}>
+    <div
+      className="app"
+      ref={appRef}
+      style={{ "--label-font-size": labelFontSize } as React.CSSProperties}
+    >
       <Sidebar
         rootFolders={rootFolders}
         loading={loading}
@@ -82,7 +92,10 @@ function AppContent() {
         viewportWidth={appSize.width}
       />
       {activeFolderId ? (
-        <Canvas folderId={activeFolderId} />
+        <Canvas
+          folderId={activeFolderId}
+          onLabelFontSizeChange={setLabelFontSize}
+        />
       ) : (
         <p className="canvas-empty">No bookmark folders found.</p>
       )}

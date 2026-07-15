@@ -60,15 +60,16 @@ function folderNode(
 
 describe("Canvas", () => {
   it("renders bookmarks from the folder, paginating once capacity is exceeded", async () => {
-    // 10 bookmarks; default global settings (max 96, min 48) at 200x100
-    // gives capacity 4x2 = 8 per page -> 2 pages (8 + 2).
+    // 10 bookmarks; below the 1660px tier breakpoint -> 80px icons ->
+    // floor(320/80)=4 cols, floor(160/80)=2 rows -> capacity 8 per page ->
+    // 2 pages (8 + 2).
     mock.addNode(folderNode("f1", "0"));
     for (let i = 0; i < 10; i++) {
       mock.addNode(bookmarkNode(`b${i}`, "f1", i));
     }
 
     renderCanvas("f1");
-    await resizeCanvas(200, 100);
+    await resizeCanvas(320, 160);
 
     await waitFor(() => {
       expect(screen.getByText("Bookmark b0")).toBeInTheDocument();
@@ -86,7 +87,7 @@ describe("Canvas", () => {
     const user = userEvent.setup();
 
     renderCanvas("f1");
-    await resizeCanvas(200, 100);
+    await resizeCanvas(320, 160);
     await waitFor(() => {
       expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
     });
@@ -127,41 +128,41 @@ describe("Canvas", () => {
     mock.addNode(bookmarkNode("b0", "f1", 0));
 
     renderCanvas("f1");
-    await resizeCanvas(200, 100);
-    // 200x100 below the 1660px tier breakpoint -> 48px icons ->
-    // floor(200/48)=4 cols, floor(100/48)=2 rows -> 8 cells total.
+    await resizeCanvas(320, 160);
+    // 320x160 below the 1660px tier breakpoint -> 80px icons ->
+    // floor(320/80)=4 cols, floor(160/80)=2 rows -> 8 cells total.
     await waitFor(() => {
       expect(document.querySelectorAll(".grid-cell")).toHaveLength(8);
     });
   });
 
-  it("sizes cells at the 63px tier between 1660px and 2100px", async () => {
+  it("sizes cells at the 106px tier between 1660px and 2100px", async () => {
     mock.addNode(folderNode("f1", "0"));
     mock.addNode(bookmarkNode("b0", "f1", 0));
 
     renderCanvas("f1");
-    await resizeCanvas(1700, 63);
+    await resizeCanvas(1700, 106);
 
     await waitFor(() => {
       const cells = document.querySelectorAll(".grid-cell");
-      // floor(1700/63)=26 cols, floor(63/63)=1 row -> 26 cells.
-      expect(cells).toHaveLength(26);
-      expect((cells[0] as HTMLElement).style.width).toBe("63px");
+      // floor(1700/106)=16 cols, floor(106/106)=1 row -> 16 cells.
+      expect(cells).toHaveLength(16);
+      expect((cells[0] as HTMLElement).style.width).toBe("106px");
     });
   });
 
-  it("sizes cells at the 100px tier at 2100px and wider", async () => {
+  it("sizes cells at the 166px tier at 2100px and wider", async () => {
     mock.addNode(folderNode("f1", "0"));
     mock.addNode(bookmarkNode("b0", "f1", 0));
 
     renderCanvas("f1");
-    await resizeCanvas(2100, 100);
+    await resizeCanvas(2100, 166);
 
     await waitFor(() => {
       const cells = document.querySelectorAll(".grid-cell");
-      // floor(2100/100)=21 cols, floor(100/100)=1 row -> 21 cells.
-      expect(cells).toHaveLength(21);
-      expect((cells[0] as HTMLElement).style.width).toBe("100px");
+      // floor(2100/166)=12 cols, floor(166/166)=1 row -> 12 cells.
+      expect(cells).toHaveLength(12);
+      expect((cells[0] as HTMLElement).style.width).toBe("166px");
     });
   });
 

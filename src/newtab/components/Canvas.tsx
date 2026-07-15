@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useDndMonitor } from "@dnd-kit/core";
 import type { DragEndEvent, DragMoveEvent } from "@dnd-kit/core";
 import { resolveDrop } from "../../lib/grid/dragDrop";
@@ -8,6 +9,8 @@ import { GridCell } from "./GridCell";
 
 interface CanvasProps {
   folderId: string;
+  /** Reports the canvas's current tier label font-size upward whenever it changes, so an ancestor can apply it as a shared CSS variable (see App). */
+  onLabelFontSizeChange?: (labelFontSize: string) => void;
 }
 
 function cellKey(row: number, col: number): string {
@@ -20,18 +23,23 @@ function parseCellKey(key: string): { row: number; col: number } | null {
   return { row: Number(match[1]), col: Number(match[2]) };
 }
 
-export function Canvas({ folderId }: CanvasProps) {
+export function Canvas({ folderId, onLabelFontSizeChange }: CanvasProps) {
   const {
     containerRef,
     capacity,
     pages,
     bookmarksById,
     iconSize,
+    labelFontSize,
     loading,
     currentPage,
     setCurrentPage,
     moveBookmarks,
   } = useGridLayout(folderId);
+
+  useEffect(() => {
+    onLabelFontSizeChange?.(labelFontSize);
+  }, [labelFontSize, onLabelFontSizeChange]);
 
   const page = pages[currentPage] ?? [];
   const entryByCellKey = new Map(

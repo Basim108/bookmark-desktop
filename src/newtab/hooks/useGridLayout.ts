@@ -10,10 +10,7 @@ import {
   reflowFolderPositions,
   shouldReflowOnGrowth,
 } from "../../lib/grid/reflow";
-import {
-  computeGridCapacity,
-  resolveTierIconSize,
-} from "../../lib/grid/sizing";
+import { computeGridCapacity, resolveTier } from "../../lib/grid/sizing";
 import type { GridCapacity } from "../../lib/grid/types";
 import type { LayoutCell } from "../../lib/grid/layout";
 import { onStorageKeysChanged } from "../../lib/storage/onChanged";
@@ -28,6 +25,7 @@ interface UseGridLayoutResult {
   pages: LayoutCell[][];
   bookmarksById: Map<string, chrome.bookmarks.BookmarkTreeNode>;
   iconSize: number;
+  labelFontSize: string;
   loading: boolean;
   currentPage: number;
   setCurrentPage: (page: number) => void;
@@ -44,14 +42,14 @@ interface PageSelection {
   page: number;
 }
 
-/** Icon size is a fixed tier lookup on available width; capacity is directly derived from it — no separate stretch-to-fill step. */
-function computeCapacityAndIconSize(
+/** Icon size and label font-size are a fixed tier lookup on available width; capacity is directly derived from icon size — no separate stretch-to-fill step. */
+function computeCapacityAndTier(
   width: number,
   height: number,
-): { capacity: GridCapacity; iconSize: number } {
-  const iconSize = resolveTierIconSize(width);
+): { capacity: GridCapacity; iconSize: number; labelFontSize: string } {
+  const { iconSize, labelFontSize } = resolveTier(width);
   const capacity = computeGridCapacity(width, height, iconSize);
-  return { capacity, iconSize };
+  return { capacity, iconSize, labelFontSize };
 }
 
 export function useGridLayout(folderId: string): UseGridLayoutResult {
@@ -105,8 +103,8 @@ export function useGridLayout(folderId: string): UseGridLayoutResult {
     [folderId],
   );
 
-  const { capacity, iconSize } = useMemo(
-    () => computeCapacityAndIconSize(size.width, size.height),
+  const { capacity, iconSize, labelFontSize } = useMemo(
+    () => computeCapacityAndTier(size.width, size.height),
     [size.width, size.height],
   );
 
@@ -233,6 +231,7 @@ export function useGridLayout(folderId: string): UseGridLayoutResult {
     pages,
     bookmarksById,
     iconSize,
+    labelFontSize,
     loading: !dataLoaded,
     currentPage,
     setCurrentPage: (page: number) => setPageSelection({ folderId, page }),

@@ -200,7 +200,7 @@ body {
 }
 
 .bookmark-icon-label {
-  font-size: 0.75rem;
+  font-size: var(--label-font-size);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -212,6 +212,10 @@ body {
   align-items: center;
   gap: 3px;
   cursor: pointer;
+}
+
+.folder-label {
+  font-size: var(--label-font-size);
 }
 
 .folder-select:hover,
