@@ -4,9 +4,9 @@ import type { GridCapacity } from "./types";
 const MEDIUM_BREAKPOINT = 1660;
 const LARGE_BREAKPOINT = 2100;
 
-const SMALL_ICON_SIZE = 48;
-const MEDIUM_ICON_SIZE = 63;
-const LARGE_ICON_SIZE = 100;
+const SMALL_ICON_SIZE = 80;
+const MEDIUM_ICON_SIZE = 106;
+const LARGE_ICON_SIZE = 166;
 
 /**
  * Icon size is a fixed step function of the canvas's own available width —

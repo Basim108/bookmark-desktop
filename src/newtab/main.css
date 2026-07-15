@@ -65,6 +65,11 @@ body {
   gap: 8px;
   padding: 8px;
   overflow: auto;
+  scrollbar-width: none;
+}
+
+.canvas-grid::-webkit-scrollbar {
+  display: none;
 }
 
 .grid-cell {
