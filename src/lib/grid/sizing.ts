@@ -1,8 +1,8 @@
 import type { GridCapacity } from "./types";
 
 /** Viewport-width breakpoints for the grid's icon-size tiers. */
-const MEDIUM_BREAKPOINT = 1660;
-const LARGE_BREAKPOINT = 2100;
+const MEDIUM_BREAKPOINT = 512;
+const LARGE_BREAKPOINT = 1024;
 
 const SMALL_ICON_SIZE = 80;
 const MEDIUM_ICON_SIZE = 106;

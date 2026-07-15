@@ -60,7 +60,7 @@ function folderNode(
 
 describe("Canvas", () => {
   it("renders bookmarks from the folder, paginating once capacity is exceeded", async () => {
-    // 10 bookmarks; below the 1660px tier breakpoint -> 80px icons ->
+    // 10 bookmarks; below the 512px tier breakpoint -> 80px icons ->
     // floor(320/80)=4 cols, floor(160/80)=2 rows -> capacity 8 per page ->
     // 2 pages (8 + 2).
     mock.addNode(folderNode("f1", "0"));
@@ -129,39 +129,39 @@ describe("Canvas", () => {
 
     renderCanvas("f1");
     await resizeCanvas(320, 160);
-    // 320x160 below the 1660px tier breakpoint -> 80px icons ->
+    // 320x160 below the 512px tier breakpoint -> 80px icons ->
     // floor(320/80)=4 cols, floor(160/80)=2 rows -> 8 cells total.
     await waitFor(() => {
       expect(document.querySelectorAll(".grid-cell")).toHaveLength(8);
     });
   });
 
-  it("sizes cells at the 106px tier between 1660px and 2100px", async () => {
+  it("sizes cells at the 106px tier between 512px and 1024px", async () => {
     mock.addNode(folderNode("f1", "0"));
     mock.addNode(bookmarkNode("b0", "f1", 0));
 
     renderCanvas("f1");
-    await resizeCanvas(1700, 106);
+    await resizeCanvas(700, 106);
 
     await waitFor(() => {
       const cells = document.querySelectorAll(".grid-cell");
-      // floor(1700/106)=16 cols, floor(106/106)=1 row -> 16 cells.
-      expect(cells).toHaveLength(16);
+      // floor(700/106)=6 cols, floor(106/106)=1 row -> 6 cells.
+      expect(cells).toHaveLength(6);
       expect((cells[0] as HTMLElement).style.width).toBe("106px");
     });
   });
 
-  it("sizes cells at the 166px tier at 2100px and wider", async () => {
+  it("sizes cells at the 166px tier at 1024px and wider", async () => {
     mock.addNode(folderNode("f1", "0"));
     mock.addNode(bookmarkNode("b0", "f1", 0));
 
     renderCanvas("f1");
-    await resizeCanvas(2100, 166);
+    await resizeCanvas(1024, 166);
 
     await waitFor(() => {
       const cells = document.querySelectorAll(".grid-cell");
-      // floor(2100/166)=12 cols, floor(166/166)=1 row -> 12 cells.
-      expect(cells).toHaveLength(12);
+      // floor(1024/166)=6 cols, floor(166/166)=1 row -> 6 cells.
+      expect(cells).toHaveLength(6);
       expect((cells[0] as HTMLElement).style.width).toBe("166px");
     });
   });

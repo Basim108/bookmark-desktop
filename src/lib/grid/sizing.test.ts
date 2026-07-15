@@ -2,27 +2,27 @@ import { describe, expect, it } from "vitest";
 import { computeGridCapacity, resolveTier } from "./sizing";
 
 describe("resolveTier", () => {
-  it("returns the 80px/0.75rem tier below the 1660px breakpoint", () => {
+  it("returns the 80px/0.75rem tier below the 512px breakpoint", () => {
     expect(resolveTier(0)).toEqual({ iconSize: 80, labelFontSize: "0.75rem" });
-    expect(resolveTier(1659)).toEqual({
+    expect(resolveTier(511)).toEqual({
       iconSize: 80,
       labelFontSize: "0.75rem",
     });
   });
 
-  it("returns the 106px/0.85rem tier from 1660px up to (not including) 2100px", () => {
-    expect(resolveTier(1660)).toEqual({
+  it("returns the 106px/0.85rem tier from 512px up to (not including) 1024px", () => {
+    expect(resolveTier(512)).toEqual({
       iconSize: 106,
       labelFontSize: "0.85rem",
     });
-    expect(resolveTier(2099)).toEqual({
+    expect(resolveTier(1023)).toEqual({
       iconSize: 106,
       labelFontSize: "0.85rem",
     });
   });
 
-  it("returns the 166px/1rem tier at 2100px and wider", () => {
-    expect(resolveTier(2100)).toEqual({
+  it("returns the 166px/1rem tier at 1024px and wider", () => {
+    expect(resolveTier(1024)).toEqual({
       iconSize: 166,
       labelFontSize: "1rem",
     });
