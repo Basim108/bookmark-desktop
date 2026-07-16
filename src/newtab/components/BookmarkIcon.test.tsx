@@ -27,6 +27,7 @@ function bookmarkNode(
 }
 
 function renderIcon(bookmark: chrome.bookmarks.BookmarkTreeNode) {
+  mock.addNode(bookmark);
   return render(
     <DndTestProvider>
       <BookmarkIcon bookmark={bookmark} size={64} folderId="1" />
@@ -65,16 +66,15 @@ describe("BookmarkIcon", () => {
     });
   });
 
-  it("shows the label under the icon by default, and only as a tooltip once set to tooltip-only", async () => {
-    const user = userEvent.setup();
+  it("shows the label under the icon by default and only as a tooltip once set to tooltip-only", async () => {
     renderIcon(bookmarkNode("b1"));
 
-    expect(screen.getByText("Bookmark b1")).toBeInTheDocument();
+    // Default: label rendered under the icon.
+    expect(await screen.findByText("Bookmark b1")).toBeInTheDocument();
 
-    await user.click(
-      screen.getByRole("button", { name: "Bookmark b1 icon settings" }),
-    );
-    await user.click(screen.getByRole("radio", { name: "Tooltip only" }));
+    // Simulates the setting changing via chrome.storage (this component reads
+    // it live; the setting itself is now edited from the Edit Bookmark window).
+    await setBookmarkLabelDisplay("b1", "tooltip");
 
     await waitFor(() =>
       expect(screen.queryByText("Bookmark b1")).not.toBeInTheDocument(),
@@ -82,17 +82,18 @@ describe("BookmarkIcon", () => {
     expect(screen.getByTitle("Bookmark b1")).toBeInTheDocument();
   });
 
-  it("live-updates its label display when changed from another tab", async () => {
+  it("opens the Edit Bookmark window from the gear button", async () => {
+    const user = userEvent.setup();
     renderIcon(bookmarkNode("b1"));
-    expect(await screen.findByText("Bookmark b1")).toBeInTheDocument();
 
-    // Simulates the setting changing via chrome.storage in another open
-    // new-tab page, not any action within this component.
-    await setBookmarkLabelDisplay("b1", "tooltip");
+    expect(
+      screen.queryByRole("dialog", { name: "Edit Bookmark" }),
+    ).not.toBeInTheDocument();
 
-    await waitFor(() =>
-      expect(screen.queryByText("Bookmark b1")).not.toBeInTheDocument(),
-    );
-    expect(screen.getByTitle("Bookmark b1")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit Bookmark b1" }));
+
+    expect(
+      screen.getByRole("dialog", { name: "Edit Bookmark" }),
+    ).toBeInTheDocument();
   });
 });

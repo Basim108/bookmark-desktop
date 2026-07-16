@@ -117,39 +117,15 @@ body {
   position: absolute;
   top: -4px;
   right: -4px;
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   line-height: 1;
-  font-size: 10px;
+  font-size: 16px;
   border: none;
   border-radius: 50%;
   background: light-dark(rgb(255 255 255 / 85%), rgb(0 0 0 / 65%));
   cursor: pointer;
-}
-
-.bookmark-icon-settings-panel {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 180px;
-  padding: 8px;
-  background: light-dark(#fff, #222);
-  border: 1px solid light-dark(#ddd, #444);
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 20%);
-  font-size: 0.75rem;
-  text-align: left;
-}
-
-.bookmark-settings-option {
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 
 .icon-upload-controls {
@@ -364,4 +340,226 @@ body {
   justify-content: center;
   gap: 12px;
   padding: 8px;
+}
+
+/* Centered "Edit Bookmark" window — the app's one true modal. Sizing and
+   spacing follow design/examples/05-general-bookmark-settings-window.png. */
+.edit-bookmark-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 50%);
+}
+
+.edit-bookmark-window {
+  display: flex;
+  flex-direction: column;
+  width: 440px;
+  max-width: calc(100vw - 32px);
+  background: light-dark(#fff, #2b2b2b);
+  color: light-dark(#1a1a1a, #f0f0f0);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgb(0 0 0 / 40%);
+  overflow: hidden;
+}
+
+.edit-bookmark-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding: 0 20px;
+  border-bottom: 1px solid light-dark(#e2e2e2, #3d3d3d);
+}
+
+.edit-bookmark-title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.edit-bookmark-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  color: inherit;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.edit-bookmark-close:hover {
+  background: light-dark(rgb(0 0 0 / 8%), rgb(255 255 255 / 12%));
+}
+
+.edit-bookmark-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+}
+
+.edit-bookmark-icon-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.edit-bookmark-icon-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+  background: light-dark(#111, #1e1e1e);
+  border-radius: 12px;
+}
+
+.edit-bookmark-icon-preview .custom-icon,
+.edit-bookmark-icon-preview .favicon-image,
+.edit-bookmark-icon-preview .favicon-fallback {
+  width: 64px;
+  height: 64px;
+}
+
+.edit-bookmark-image-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.edit-bookmark-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: light-dark(#555, #b0b0b0);
+}
+
+.edit-bookmark-image-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-bookmark-upload-button {
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  color: #fff;
+  background: #2abe7d;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.edit-bookmark-upload-button:hover {
+  background: #24a86d;
+}
+
+.edit-bookmark-upload-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.edit-bookmark-remove-image {
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 0.9rem;
+  color: inherit;
+  background: none;
+  border: 1px solid light-dark(#ccc, #555);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.edit-bookmark-image-error,
+.edit-bookmark-input-error {
+  margin: 0;
+  font-size: 0.8rem;
+  color: light-dark(#b00020, #ff6b6b);
+}
+
+.edit-bookmark-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.edit-bookmark-field-label {
+  width: 64px;
+  flex-shrink: 0;
+  font-size: 0.9rem;
+}
+
+.edit-bookmark-input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  font: inherit;
+  color: inherit;
+  background: light-dark(#fff, #1e1e1e);
+  border: 1px solid light-dark(#ccc, #555);
+  border-radius: 4px;
+}
+
+.edit-bookmark-input[aria-invalid="true"] {
+  border-color: light-dark(#b00020, #ff6b6b);
+}
+
+.edit-bookmark-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.edit-bookmark-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px 20px;
+}
+
+.edit-bookmark-remove {
+  padding: 8px 16px;
+  font: inherit;
+  font-size: 0.9rem;
+  color: light-dark(#b00020, #ff6b6b);
+  background: none;
+  border: 1px solid light-dark(#e0b4bb, #6b3a3f);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.edit-bookmark-save {
+  padding: 8px 20px;
+  font: inherit;
+  font-size: 0.9rem;
+  color: #fff;
+  background: #1a73e8;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.edit-bookmark-save:disabled {
+  opacity: 0.5;
+  cursor: default;
 }

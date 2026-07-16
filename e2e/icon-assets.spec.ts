@@ -27,7 +27,7 @@ test("bookmark's favicon renders via the _favicon API by default", async ({
   await expect(img).toHaveAttribute("src", /_favicon/);
 });
 
-test("uploading a custom icon replaces the favicon, and removing it reverts back", async ({
+test("uploading a custom icon in the Edit Bookmark window replaces the favicon on Save, and removing it reverts back", async ({
   context,
   extensionId,
 }) => {
@@ -47,26 +47,33 @@ test("uploading a custom icon replaces the favicon, and removing it reverts back
     page.getByRole("img", { name: "Icon Upload Bookmark" }),
   ).toBeVisible();
 
-  await page
-    .getByRole("button", { name: "Icon Upload Bookmark icon settings" })
-    .click();
-  await page.getByLabel("Upload icon").setInputFiles(TINY_PNG_PATH);
+  await page.getByRole("button", { name: "Edit Icon Upload Bookmark" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit Bookmark" });
+  await dialog.getByLabel("Upload image").setInputFiles(TINY_PNG_PATH);
 
-  const customIcon = page.getByRole("img", { name: "Icon Upload Bookmark" });
-  await expect(customIcon).toHaveAttribute("src", /^blob:/);
+  // Staged preview shows immediately inside the window...
+  await expect(
+    dialog.getByRole("img", { name: "Icon Upload Bookmark" }),
+  ).toHaveAttribute("src", /^blob:/);
 
-  // Persists across reload — settings/icon bytes are both stored, not
-  // held only in memory.
+  // ...but only Save persists it to the canvas.
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(
+    page.getByRole("img", { name: "Icon Upload Bookmark" }),
+  ).toHaveAttribute("src", /^blob:/);
+
+  // Persists across reload — settings/icon bytes are both stored.
   await page.reload();
   await expect(
     page.getByRole("img", { name: "Icon Upload Bookmark" }),
   ).toHaveAttribute("src", /^blob:/);
 
-  await page
-    .getByRole("button", { name: "Icon Upload Bookmark icon settings" })
-    .click();
-  await page.getByRole("button", { name: "Remove icon" }).click();
+  await page.getByRole("button", { name: "Edit Icon Upload Bookmark" }).click();
+  await dialog.getByRole("button", { name: "Remove image" }).click();
+  await dialog.getByRole("button", { name: "Save" }).click();
 
+  await expect(dialog).toBeHidden();
   await expect(
     page.getByRole("img", { name: "Icon Upload Bookmark" }),
   ).toHaveAttribute("src", /_favicon/);
@@ -88,13 +95,14 @@ test("uploading an SVG is rejected with an inline error, and the favicon is left
   });
   await page.reload();
 
-  await page
-    .getByRole("button", { name: "SVG Reject Bookmark icon settings" })
-    .click();
-  await page.getByLabel("Upload icon").setInputFiles(TINY_SVG_PATH);
+  await page.getByRole("button", { name: "Edit SVG Reject Bookmark" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit Bookmark" });
+  await dialog.getByLabel("Upload image").setInputFiles(TINY_SVG_PATH);
 
-  await expect(page.getByRole("alert")).toContainText(/unsupported file type/i);
+  await expect(dialog.getByRole("alert")).toContainText(
+    /unsupported file type/i,
+  );
   await expect(
-    page.getByRole("img", { name: "SVG Reject Bookmark" }),
+    dialog.getByRole("img", { name: "SVG Reject Bookmark" }),
   ).toHaveAttribute("src", /_favicon/);
 });

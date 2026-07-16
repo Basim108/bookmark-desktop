@@ -133,6 +133,34 @@ export function installChromeMock() {
           });
         },
       ),
+      update: vi.fn(
+        async (
+          id: string,
+          changes: { title?: string; url?: string },
+        ): Promise<chrome.bookmarks.BookmarkTreeNode> => {
+          const node = bookmarkNodes.get(id);
+          if (!node) throw new Error(`No such bookmark node: ${id}`);
+          const updated = { ...node, ...changes };
+          bookmarkNodes.set(id, updated);
+          bookmarksEvents.onChanged.emit(
+            id,
+            updated.url === undefined
+              ? { title: updated.title }
+              : { title: updated.title, url: updated.url },
+          );
+          return updated;
+        },
+      ),
+      remove: vi.fn(async (id: string): Promise<void> => {
+        const node = bookmarkNodes.get(id);
+        if (!node) throw new Error(`No such bookmark node: ${id}`);
+        bookmarkNodes.delete(id);
+        bookmarksEvents.onRemoved.emit(id, {
+          parentId: node.parentId ?? "",
+          index: node.index ?? 0,
+          node,
+        });
+      }),
     },
   };
 

@@ -152,3 +152,4 @@ vite.config.ts.timestamp-*
 # Packaged .crx + signing key (built on demand for security scans/store
 # submission, never committed — the .pem is a private key)
 security/
+design/examples
