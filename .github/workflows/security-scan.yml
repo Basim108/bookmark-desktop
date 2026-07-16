@@ -27,7 +27,7 @@ jobs:
       - name: Retire.js — known-vulnerable JS library scan
         run: npm run security:retire -- --outputformat text
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
