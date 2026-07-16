@@ -115,7 +115,7 @@ export function FolderTreeNode({
         {!isRoot && (
           <button
             type="button"
-            className="folder-settings-toggle"
+            className={`folder-settings-toggle${settingsOpen ? " folder-settings-toggle--open" : ""}`}
             aria-label="Folder settings"
             onClick={() => onOpenSettings(settingsOpen ? undefined : folder.id)}
           >

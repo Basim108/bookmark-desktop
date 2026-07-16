@@ -2,7 +2,6 @@
 
 ## Purpose
 The centered "Edit Bookmark" window: a single, opaque, viewport-centered surface for editing one bookmark's icon, name, URL, and label visibility, and for removing it. All edits are staged and applied atomically on Save; closing the window without saving discards them.
-
 ## Requirements
 ### Requirement: Bookmark Edit Window Presentation
 The system SHALL present per-bookmark editing in a single window that is horizontally and vertically centered within the browser window, rendered above all page content with a fully opaque (non-transparent) background. The window SHALL have a title bar containing the title "Edit Bookmark" and a close control in the top-right corner sized large enough to be an easy click target. The window's overall size and the spacing between its internal components SHALL follow the reference design (`design/examples/05-general-bookmark-settings-window.png`): an approximately 440px-wide window with a title bar, an icon preview with an adjacent image-upload action, editable Name and URL fields, a label-visibility control, and a bottom row containing a Remove action and a Save action.
@@ -77,3 +76,28 @@ The system SHALL provide a Remove action in the Edit Bookmark window that, after
 #### Scenario: Removal cleans up stored bookmark data
 - **WHEN** a bookmark is removed via the Edit Bookmark window
 - **THEN** its stored position, settings, and any custom icon image are cleaned up (via the existing removal cascade)
+
+### Requirement: Edit Trigger Hidden Until Cell Hover Or Focus
+
+The per-bookmark edit trigger (settings gear) on the canvas SHALL be visually hidden at rest and SHALL be revealed only while the mouse hovers the bookmark's occupied grid cell or the trigger itself receives keyboard focus. The trigger SHALL remain present in the DOM and reachable by keyboard at all times, and revealing or hiding it SHALL NOT change the cell's layout or shift its icon or label. Activating the trigger SHALL open the Edit Bookmark window exactly as before, with no change to its click behavior.
+
+#### Scenario: Gear hidden while cell is at rest
+
+- **WHEN** a bookmark's grid cell is neither hovered nor keyboard-focused
+- **THEN** its edit trigger (settings gear) is not visually shown
+
+#### Scenario: Gear revealed on cell hover
+
+- **WHEN** the mouse hovers over the bookmark's occupied grid cell
+- **THEN** its edit trigger (settings gear) becomes visible without shifting the cell's icon or label
+
+#### Scenario: Gear revealed on keyboard focus
+
+- **WHEN** the edit trigger receives keyboard focus (e.g. via Tab) while its cell is not hovered
+- **THEN** the trigger becomes visible so a keyboard user can see and activate it
+
+#### Scenario: Activation behavior unchanged
+
+- **WHEN** the user activates the revealed edit trigger
+- **THEN** the Edit Bookmark window opens for that bookmark exactly as it did when the trigger was always visible
+

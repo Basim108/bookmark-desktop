@@ -159,6 +159,15 @@ body {
   border-radius: 50%;
   background: light-dark(rgb(255 255 255 / 85%), rgb(0 0 0 / 65%));
   cursor: pointer;
+  /* Hidden at rest; revealed on cell hover or keyboard focus. Kept in the DOM
+     and clickable (opacity, not display) so layout never shifts. */
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.grid-cell--occupied:hover .bookmark-icon-settings-toggle,
+.bookmark-icon-settings-toggle:focus-visible {
+  opacity: 1;
 }
 
 .icon-upload-controls {
@@ -316,6 +325,17 @@ body {
   font-size: 16px;
   color: inherit;
   cursor: pointer;
+  /* Hidden at rest; revealed on row hover, keyboard focus, or while this
+     folder's settings window is open. Kept in the DOM and clickable
+     (opacity, not display) so the row layout never shifts. */
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.folder-row:hover .folder-settings-toggle,
+.folder-settings-toggle:focus-visible,
+.folder-settings-toggle--open {
+  opacity: 1;
 }
 
 .canvas-pagination {
