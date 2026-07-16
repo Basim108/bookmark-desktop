@@ -2,10 +2,29 @@ import { useState } from "react";
 import {
   DndContext,
   PointerSensor,
+  pointerWithin,
+  rectIntersection,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import type { DragEndEvent } from "@dnd-kit/core";
+import type { CollisionDetection, DragEndEvent } from "@dnd-kit/core";
+
+/**
+ * Resolve the drop target by the pointer's position first, falling back to
+ * rectangle-intersection only when the pointer is over no droppable. The
+ * default (rectIntersection alone) targets whichever droppable the dragged
+ * element's *rectangle* overlaps most — unreliable when a large bookmark
+ * icon (up to 166px) is dragged over the stack of ~22px sidebar folder rows,
+ * where the icon rect overlaps several rows and can resolve to the wrong
+ * folder even though the cursor is squarely inside the intended one. The
+ * fallback preserves forgiving canvas-cell drops (e.g. onto a grid gap).
+ */
+const collisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  return pointerCollisions.length > 0
+    ? pointerCollisions
+    : rectIntersection(args);
+};
 import { Canvas } from "./components/Canvas";
 import { Sidebar } from "./components/Sidebar";
 import { useSubfolders } from "./hooks/useSubfolders";
@@ -51,7 +70,11 @@ export function App() {
   }
 
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={collisionDetection}
+      onDragEnd={handleDragEnd}
+    >
       <AppContent />
     </DndContext>
   );
