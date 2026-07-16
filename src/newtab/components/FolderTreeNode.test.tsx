@@ -1,12 +1,10 @@
 import { useState } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { installChromeMock } from "../../test/chromeMock";
 import { DndTestProvider } from "../../test/DndTestProvider";
 import { FolderTreeNode } from "./FolderTreeNode";
-import { setFolderHasCustomIcon } from "../../lib/storage/folderSettings";
-import { putIcon } from "../../lib/storage/iconDb";
 
 const mock = installChromeMock();
 
@@ -24,19 +22,24 @@ beforeEach(() => {
 
 /**
  * Owns the shared openSettingsFolderId state the same way Sidebar does, so
- * tests exercise the real single-popup-open-at-a-time coordination rather
+ * tests exercise the real single-window-open-at-a-time coordination rather
  * than a stand-in. FolderTreeNode relies (via useSubfolders) on
  * useDndMonitor, which requires a DndContext ancestor — in the real app
  * that's provided by App.
+ *
+ * `depth` defaults to 1 (an editable, non-root folder). Root behavior is
+ * exercised explicitly with depth 0.
  */
 function Harness({
   folders,
   activeFolderId,
   onSelectFolder,
+  depth = 1,
 }: {
   folders: chrome.bookmarks.BookmarkTreeNode[];
   activeFolderId: string | undefined;
   onSelectFolder: (folderId: string) => void;
+  depth?: number;
 }) {
   const [openSettingsFolderId, setOpenSettingsFolderId] = useState<
     string | undefined
@@ -51,7 +54,7 @@ function Harness({
             folder={folder}
             activeFolderId={activeFolderId}
             onSelectFolder={onSelectFolder}
-            depth={0}
+            depth={depth}
             openSettingsFolderId={openSettingsFolderId}
             onOpenSettings={setOpenSettingsFolderId}
           />
@@ -72,8 +75,15 @@ function renderFolderTreeNode(props: {
       folders={[props.folder]}
       activeFolderId={props.activeFolderId}
       onSelectFolder={props.onSelectFolder}
+      depth={props.depth}
     />,
   );
+}
+
+function gearFor(title: string): HTMLElement {
+  return screen
+    .getByRole("button", { name: title })
+    .parentElement!.querySelector(".folder-settings-toggle") as HTMLElement;
 }
 
 describe("FolderTreeNode", () => {
@@ -81,10 +91,10 @@ describe("FolderTreeNode", () => {
     const onSelectFolder = vi.fn();
     const user = userEvent.setup();
     renderFolderTreeNode({
-      folder: folderNode("f1", "0", "Work"),
+      folder: folderNode("f1", "1", "Work"),
       activeFolderId: undefined,
       onSelectFolder: onSelectFolder,
-      depth: 0,
+      depth: 1,
     });
 
     await user.click(screen.getByRole("button", { name: "Work" }));
@@ -95,10 +105,10 @@ describe("FolderTreeNode", () => {
     mock.addNode(folderNode("child-1", "f1", "Personal"));
     const user = userEvent.setup();
     renderFolderTreeNode({
-      folder: folderNode("f1", "0", "Work"),
+      folder: folderNode("f1", "1", "Work"),
       activeFolderId: undefined,
       onSelectFolder: vi.fn(),
-      depth: 0,
+      depth: 1,
     });
 
     expect(screen.queryByText("Personal")).not.toBeInTheDocument();
@@ -110,73 +120,161 @@ describe("FolderTreeNode", () => {
     expect(await screen.findByText("Personal")).toBeInTheDocument();
   });
 
-  it("disables icon display options until the folder has a custom icon", async () => {
+  it("opens the folder settings window when the gear is clicked", async () => {
     const user = userEvent.setup();
     renderFolderTreeNode({
-      folder: folderNode("f1", "0", "Work"),
+      folder: folderNode("f1", "1", "Work"),
       activeFolderId: undefined,
       onSelectFolder: vi.fn(),
-      depth: 0,
+      depth: 1,
     });
 
-    await user.click(
-      screen.getByRole("button", { name: "Folder display settings" }),
-    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
-    expect(screen.getByRole("radio", { name: "Icon only" })).toBeDisabled();
-    expect(screen.getByRole("radio", { name: "Icon + name" })).toBeDisabled();
-    expect(screen.getByRole("radio", { name: "Name only" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Folder settings" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByText("Folder Settings")).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toHaveValue("Work");
   });
 
-  it("enables icon display options once the folder has a custom icon", async () => {
-    await setFolderHasCustomIcon("f1", true);
+  it("has no display-mode options in the settings window", async () => {
     const user = userEvent.setup();
     renderFolderTreeNode({
-      folder: folderNode("f1", "0", "Work"),
+      folder: folderNode("f1", "1", "Work"),
       activeFolderId: undefined,
       onSelectFolder: vi.fn(),
-      depth: 0,
+      depth: 1,
     });
 
-    await user.click(
-      await screen.findByRole("button", { name: "Folder display settings" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Folder settings" }));
 
-    expect(
-      await screen.findByRole("radio", { name: "Icon only" }),
-    ).toBeEnabled();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
   });
 
-  it("live-updates when the folder's settings change from another tab", async () => {
+  it("toggles the window closed when the gear is clicked again", async () => {
     const user = userEvent.setup();
     renderFolderTreeNode({
-      folder: folderNode("f1", "0", "Work"),
+      folder: folderNode("f1", "1", "Work"),
       activeFolderId: undefined,
       onSelectFolder: vi.fn(),
-      depth: 0,
+      depth: 1,
     });
 
-    await user.click(
-      screen.getByRole("button", { name: "Folder display settings" }),
+    await user.click(screen.getByRole("button", { name: "Folder settings" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Folder settings" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("closes the window on Escape", async () => {
+    const user = userEvent.setup();
+    renderFolderTreeNode({
+      folder: folderNode("f1", "1", "Work"),
+      activeFolderId: undefined,
+      onSelectFolder: vi.fn(),
+      depth: 1,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Folder settings" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("only allows one folder's settings window to be open at a time", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        folders={[
+          folderNode("f1", "1", "Work"),
+          folderNode("f2", "1", "Personal"),
+        ]}
+        activeFolderId={undefined}
+        onSelectFolder={vi.fn()}
+      />,
     );
-    expect(screen.getByRole("radio", { name: "Icon only" })).toBeDisabled();
 
-    // Simulates the setting changing via chrome.storage in another open
-    // new-tab page, not any action within this component.
-    await setFolderHasCustomIcon("f1", true);
+    await user.click(gearFor("Work"));
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getByLabelText("Name")).toHaveValue("Work");
 
-    await waitFor(() =>
-      expect(screen.getByRole("radio", { name: "Icon only" })).toBeEnabled(),
+    // Switch to the other folder by closing then opening the second window,
+    // since the modal backdrop covers the sidebar while one window is open.
+    await user.keyboard("{Escape}");
+    await user.click(gearFor("Personal"));
+
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getByLabelText("Name")).toHaveValue("Personal");
+  });
+
+  describe("root folders (depth 0)", () => {
+    it("render no settings gear and cannot open a settings window", () => {
+      renderFolderTreeNode({
+        folder: folderNode("1", "0", "Bookmarks Bar"),
+        activeFolderId: undefined,
+        onSelectFolder: vi.fn(),
+        depth: 0,
+      });
+
+      expect(
+        screen.queryByRole("button", { name: "Folder settings" }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("are not draggable (no draggable attributes on the row)", () => {
+      renderFolderTreeNode({
+        folder: folderNode("1", "0", "Bookmarks Bar"),
+        activeFolderId: undefined,
+        onSelectFolder: vi.fn(),
+        depth: 0,
+      });
+
+      expect(
+        screen.getByRole("button", { name: "Bookmarks Bar" }),
+      ).not.toHaveAttribute("aria-roledescription", "draggable");
+    });
+
+    it("still select the folder when the row is clicked", async () => {
+      const onSelectFolder = vi.fn();
+      const user = userEvent.setup();
+      renderFolderTreeNode({
+        folder: folderNode("1", "0", "Bookmarks Bar"),
+        activeFolderId: undefined,
+        onSelectFolder,
+        depth: 0,
+      });
+
+      await user.click(screen.getByRole("button", { name: "Bookmarks Bar" }));
+      expect(onSelectFolder).toHaveBeenCalledWith("1");
+    });
+  });
+
+  it("a non-root row is draggable (has draggable attributes)", () => {
+    renderFolderTreeNode({
+      folder: folderNode("f1", "1", "Work"),
+      activeFolderId: undefined,
+      onSelectFolder: vi.fn(),
+      depth: 1,
+    });
+
+    expect(screen.getByRole("button", { name: "Work" })).toHaveAttribute(
+      "aria-roledescription",
+      "draggable",
     );
   });
 
   it("live-updates its subfolder list on a chrome.bookmarks structure event, without any drag", async () => {
     const user = userEvent.setup();
     renderFolderTreeNode({
-      folder: folderNode("f1", "0", "Work"),
+      folder: folderNode("f1", "1", "Work"),
       activeFolderId: undefined,
       onSelectFolder: vi.fn(),
-      depth: 0,
+      depth: 1,
     });
 
     // No expand toggle yet — f1 has no subfolders.
@@ -194,130 +292,5 @@ describe("FolderTreeNode", () => {
       await screen.findByRole("button", { name: "Expand folder" }),
     );
     expect(await screen.findByText("Personal")).toBeInTheDocument();
-  });
-
-  it("opens the settings popup without closing when clicking inside it", async () => {
-    const user = userEvent.setup();
-    renderFolderTreeNode({
-      folder: folderNode("f1", "0", "Work"),
-      activeFolderId: undefined,
-      onSelectFolder: vi.fn(),
-      depth: 0,
-    });
-
-    await user.click(
-      screen.getByRole("button", { name: "Folder display settings" }),
-    );
-    expect(screen.getByRole("group")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("radio", { name: "Name only" }));
-    expect(screen.getByRole("group")).toBeInTheDocument();
-  });
-
-  it("closes the settings popup when clicking outside it", async () => {
-    const user = userEvent.setup();
-    renderFolderTreeNode({
-      folder: folderNode("f1", "0", "Work"),
-      activeFolderId: undefined,
-      onSelectFolder: vi.fn(),
-      depth: 0,
-    });
-
-    await user.click(
-      screen.getByRole("button", { name: "Folder display settings" }),
-    );
-    expect(screen.getByRole("group")).toBeInTheDocument();
-
-    await user.click(document.body);
-    expect(screen.queryByRole("group")).not.toBeInTheDocument();
-  });
-
-  it("closes the settings popup when pressing Escape", async () => {
-    const user = userEvent.setup();
-    renderFolderTreeNode({
-      folder: folderNode("f1", "0", "Work"),
-      activeFolderId: undefined,
-      onSelectFolder: vi.fn(),
-      depth: 0,
-    });
-
-    await user.click(
-      screen.getByRole("button", { name: "Folder display settings" }),
-    );
-    expect(screen.getByRole("group")).toBeInTheDocument();
-
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByRole("group")).not.toBeInTheDocument();
-  });
-
-  it("only allows one folder's settings popup to be open at a time", async () => {
-    const user = userEvent.setup();
-    render(
-      <Harness
-        folders={[
-          folderNode("f1", "0", "Work"),
-          folderNode("f2", "0", "Personal"),
-        ]}
-        activeFolderId={undefined}
-        onSelectFolder={vi.fn()}
-      />,
-    );
-
-    await user.click(
-      screen
-        .getByRole("button", { name: "Work" })
-        .parentElement!.querySelector(".folder-settings-toggle") as HTMLElement,
-    );
-    expect(screen.getAllByRole("group")).toHaveLength(1);
-
-    await user.click(
-      screen
-        .getByRole("button", { name: "Personal" })
-        .parentElement!.querySelector(".folder-settings-toggle") as HTMLElement,
-    );
-
-    expect(screen.getAllByRole("group")).toHaveLength(1);
-  });
-
-  it("shows an icon preview in the popup when the folder has a custom icon", async () => {
-    await setFolderHasCustomIcon("f1", true);
-    await putIcon("f1", new Blob(["bytes"], { type: "image/png" }));
-    const user = userEvent.setup();
-    renderFolderTreeNode({
-      folder: folderNode("f1", "0", "Work"),
-      activeFolderId: undefined,
-      onSelectFolder: vi.fn(),
-      depth: 0,
-    });
-
-    await user.click(
-      await screen.findByRole("button", { name: "Folder display settings" }),
-    );
-
-    expect(
-      document.querySelector(".folder-settings-icon-preview"),
-    ).toBeInTheDocument();
-    await waitFor(() => {
-      const img = screen.getByRole("img", { name: "Work" });
-      expect(img.getAttribute("src")).toMatch(/^blob:/);
-    });
-  });
-
-  it("does not show an icon preview without a custom icon", async () => {
-    const user = userEvent.setup();
-    renderFolderTreeNode({
-      folder: folderNode("f1", "0", "Work"),
-      activeFolderId: undefined,
-      onSelectFolder: vi.fn(),
-      depth: 0,
-    });
-
-    await user.click(
-      screen.getByRole("button", { name: "Folder display settings" }),
-    );
-
-    expect(
-      document.querySelector(".folder-settings-icon-preview"),
-    ).not.toBeInTheDocument();
   });
 });

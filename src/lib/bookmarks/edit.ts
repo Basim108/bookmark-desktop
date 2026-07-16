@@ -43,3 +43,34 @@ export async function updateBookmark(
 export async function removeBookmark(id: string): Promise<void> {
   await chrome.bookmarks.remove(id);
 }
+
+/**
+ * Validates then persists a folder's title via chrome.bookmarks.update. A
+ * folder has no url, so only the title is validated — an empty or
+ * whitespace-only title is rejected (the folder-sidebar spec forbids nameless
+ * folders), and the stored title is trimmed so a saved name never carries
+ * padding whitespace.
+ */
+export async function updateFolderTitle(
+  id: string,
+  title: string,
+): Promise<BookmarkEditResult> {
+  const trimmed = title.trim();
+  if (trimmed.length === 0) {
+    return { ok: false, error: "empty-title" };
+  }
+  await chrome.bookmarks.update(id, { title: trimmed });
+  return { ok: true };
+}
+
+/**
+ * Deletes a folder and its entire subtree from Chrome's own store. Uses
+ * removeTree rather than remove because chrome.bookmarks.remove throws on a
+ * non-empty folder. The onRemoved listener in lib/bookmarks/events.ts fires
+ * once with the whole removed subtree and cascades cleanup of every nested
+ * bookmark/subfolder's stored position, settings, and custom-icon blob, so
+ * callers need not clean those up.
+ */
+export async function removeFolder(id: string): Promise<void> {
+  await chrome.bookmarks.removeTree(id);
+}

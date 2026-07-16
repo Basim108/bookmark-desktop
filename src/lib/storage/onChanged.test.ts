@@ -16,7 +16,7 @@ describe("onStorageKeysChanged", () => {
     onStorageKeysChanged([STORAGE_KEYS.FOLDER_SETTINGS], callback);
 
     await setStorageValue(STORAGE_KEYS.FOLDER_SETTINGS, {
-      f1: { sidebarDisplay: "label-only", hasCustomIcon: false },
+      f1: { hasCustomIcon: false },
     });
 
     expect(callback).toHaveBeenCalledTimes(1);
@@ -40,7 +40,7 @@ describe("onStorageKeysChanged", () => {
     unsubscribe();
 
     await setStorageValue(STORAGE_KEYS.FOLDER_SETTINGS, {
-      f1: { sidebarDisplay: "label-only", hasCustomIcon: false },
+      f1: { hasCustomIcon: false },
     });
 
     expect(callback).not.toHaveBeenCalled();

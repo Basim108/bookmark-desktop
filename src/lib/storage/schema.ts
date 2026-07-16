@@ -3,13 +3,14 @@ import type { GridCell } from "../grid/types";
 /** Positions of a folder's direct bookmark children: bookmarkId -> cell. */
 export type FolderPositions = Record<string, GridCell>;
 
-export type FolderSidebarDisplay =
-  "icon-only" | "label-only" | "icon-and-label";
-
 /** A folder's own sidebar row settings. Independent per folder — no inheritance chain (unlike grid settings). */
 export interface FolderSettings {
-  sidebarDisplay: FolderSidebarDisplay;
-  /** Metadata mirror of whether an IndexedDB icon record exists (Group 7), so UI can gate icon options without an async IndexedDB read. */
+  /**
+   * Metadata mirror of whether an IndexedDB icon record exists (Group 7), so
+   * the sidebar row can pick the custom-icon key vs. the shared default-icon
+   * key without an async IndexedDB read. Folder rows always render an icon +
+   * name; this only selects which icon.
+   */
   hasCustomIcon: boolean;
 }
 

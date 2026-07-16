@@ -280,58 +280,9 @@ body {
   background: none;
   border: none;
   font: inherit;
+  font-size: 16px;
   color: inherit;
   cursor: pointer;
-}
-
-.folder-settings-panel {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 180px;
-  padding: 8px;
-  background: light-dark(#fff, #222);
-  border: 1px solid light-dark(#ddd, #444);
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 20%);
-  font-size: 0.75rem;
-  text-align: left;
-}
-
-.folder-settings-option {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.folder-settings-icon-preview {
-  display: flex;
-  justify-content: center;
-  padding-bottom: 4px;
-  border-bottom: 1px solid light-dark(#eee, #333);
-}
-
-.folder-settings-icon-preview .custom-icon {
-  width: 32px;
-  height: 32px;
-}
-
-@media (min-width: 1024px) {
-  .folder-settings-icon-preview .custom-icon {
-    width: 48px;
-    height: 48px;
-  }
-}
-
-@media (min-width: 1600px) {
-  .folder-settings-icon-preview .custom-icon {
-    width: 64px;
-    height: 64px;
-  }
 }
 
 .canvas-pagination {
@@ -560,6 +511,238 @@ body {
 }
 
 .edit-bookmark-save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Centered "Folder Settings" window. Deliberately duplicates the
+   .edit-bookmark-* styling so the two settings windows look identical while
+   staying independently editable (see the change's design.md). */
+.folder-settings-window-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 50%);
+}
+
+.folder-settings-window {
+  display: flex;
+  flex-direction: column;
+  width: 440px;
+  max-width: calc(100vw - 32px);
+  background: light-dark(#fff, #2b2b2b);
+  color: light-dark(#1a1a1a, #f0f0f0);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgb(0 0 0 / 40%);
+  overflow: hidden;
+}
+
+.folder-settings-window-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding: 0 20px;
+  border-bottom: 1px solid light-dark(#e2e2e2, #3d3d3d);
+}
+
+.folder-settings-window-title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.folder-settings-window-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  color: inherit;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.folder-settings-window-close:hover {
+  background: light-dark(rgb(0 0 0 / 8%), rgb(255 255 255 / 12%));
+}
+
+.folder-settings-window-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+}
+
+.folder-settings-window-icon-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.folder-settings-window-icon-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+  background: light-dark(#111, #1e1e1e);
+  border-radius: 12px;
+}
+
+.folder-settings-window-icon-preview .custom-icon,
+.folder-settings-window-icon-preview .favicon-fallback {
+  width: 64px;
+  height: 64px;
+}
+
+.folder-settings-window-image-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.folder-settings-window-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: light-dark(#555, #b0b0b0);
+}
+
+.folder-settings-window-image-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.folder-settings-window-upload-button {
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  color: #fff;
+  background: #2abe7d;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.folder-settings-window-upload-button:hover {
+  background: #24a86d;
+}
+
+.folder-settings-window-upload-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.folder-settings-window-remove-image {
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 0.9rem;
+  color: inherit;
+  background: none;
+  border: 1px solid light-dark(#ccc, #555);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.folder-settings-window-image-error,
+.folder-settings-window-input-error {
+  margin: 0;
+  font-size: 0.8rem;
+  color: light-dark(#b00020, #ff6b6b);
+}
+
+.folder-settings-window-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.folder-settings-window-field--top {
+  align-items: flex-start;
+}
+
+.folder-settings-window-field-label {
+  width: 64px;
+  flex-shrink: 0;
+  font-size: 0.9rem;
+}
+
+.folder-settings-window-input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  font: inherit;
+  color: inherit;
+  background: light-dark(#fff, #1e1e1e);
+  border: 1px solid light-dark(#ccc, #555);
+  border-radius: 4px;
+}
+
+.folder-settings-window-input[aria-invalid="true"] {
+  border-color: light-dark(#b00020, #ff6b6b);
+}
+
+.folder-settings-window-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.folder-settings-window-radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.folder-settings-window-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px 20px;
+}
+
+.folder-settings-window-remove {
+  padding: 8px 16px;
+  font: inherit;
+  font-size: 0.9rem;
+  color: light-dark(#b00020, #ff6b6b);
+  background: none;
+  border: 1px solid light-dark(#e0b4bb, #6b3a3f);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.folder-settings-window-save {
+  padding: 8px 20px;
+  font: inherit;
+  font-size: 0.9rem;
+  color: #fff;
+  background: #1a73e8;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.folder-settings-window-save:disabled {
   opacity: 0.5;
   cursor: default;
 }

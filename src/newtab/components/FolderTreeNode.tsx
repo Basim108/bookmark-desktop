@@ -1,34 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useSubfolders } from "../hooks/useSubfolders";
 import { useFolderSettings } from "../hooks/useFolderSettings";
-import {
-  resolveFolderDisplay,
-  setFolderHasCustomIcon,
-  setFolderSidebarDisplay,
-} from "../../lib/storage/folderSettings";
-import type { FolderSidebarDisplay } from "../../lib/storage/schema";
+import { DEFAULT_FOLDER_ICON_KEY } from "../../lib/storage/defaultFolderIcon";
 import { CustomIconImage } from "./CustomIconImage";
-import { FolderIconPreview } from "./FolderIconPreview";
-import { IconUploadControls } from "./IconUploadControls";
+import { FolderSettingsWindow } from "./FolderSettingsWindow";
 
 interface FolderTreeNodeProps {
   folder: chrome.bookmarks.BookmarkTreeNode;
   activeFolderId: string | undefined;
   onSelectFolder: (folderId: string) => void;
   depth: number;
-  /** Id of the folder whose settings popup is currently open across the whole sidebar, or undefined if none is. */
+  /** Id of the folder whose settings window is currently open across the whole sidebar, or undefined if none is. */
   openSettingsFolderId: string | undefined;
-  /** Opens this folder's settings popup (pass its id) or closes whichever one is open (pass undefined). Lifted to Sidebar so only one popup is ever open at a time. */
+  /** Opens this folder's settings window (pass its id) or closes whichever one is open (pass undefined). Lifted to Sidebar so only one window is ever open at a time. */
   onOpenSettings: (folderId: string | undefined) => void;
 }
-
-const DISPLAY_OPTIONS: { value: FolderSidebarDisplay; label: string }[] = [
-  { value: "label-only", label: "Name only" },
-  { value: "icon-only", label: "Icon only" },
-  { value: "icon-and-label", label: "Icon + name" },
-];
 
 export function FolderTreeNode({
   folder,
@@ -39,36 +27,20 @@ export function FolderTreeNode({
   onOpenSettings,
 }: FolderTreeNodeProps) {
   const [expanded, setExpanded] = useState(false);
-  const settingsOpen = openSettingsFolderId === folder.id;
-  const settingsPanelRef = useRef<HTMLDivElement | null>(null);
-  const settingsToggleRef = useRef<HTMLButtonElement | null>(null);
+  // Chrome's protected top-level folders (Bookmarks Bar, Other Bookmarks,
+  // Mobile Bookmarks) are always the sidebar's depth-0 rows. They are not
+  // editable (no settings gear) and not draggable, but remain drop targets.
+  const isRoot = depth === 0;
+  const settingsOpen = !isRoot && openSettingsFolderId === folder.id;
   const { folders: subfolders } = useSubfolders(folder.id);
   const { settings, reload, version } = useFolderSettings(folder.id);
 
-  useEffect(() => {
-    if (!settingsOpen) return;
-    function handlePointerDown(event: PointerEvent) {
-      const target = event.target as Node;
-      if (settingsPanelRef.current?.contains(target)) return;
-      if (settingsToggleRef.current?.contains(target)) return;
-      onOpenSettings(undefined);
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onOpenSettings(undefined);
-      }
-    }
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [settingsOpen, onOpenSettings]);
-
-  // A folder row is both a drag source (moving it to another folder) and a
-  // drop target (accepting a dragged bookmark or another dragged folder) —
-  // the same node uses both hooks, combining their refs below.
+  // A non-root folder row is both a drag source (moving it to another folder)
+  // and a drop target (accepting a dragged bookmark or another dragged
+  // folder) — the same node uses both hooks, combining their refs below. The
+  // draggable hook is always called (hooks can't be conditional), but its
+  // listeners/attributes/transform are only wired up when the row isn't a
+  // root, so root rows never initiate a drag.
   const {
     attributes,
     listeners,
@@ -88,23 +60,18 @@ export function FolderTreeNode({
     data: { type: "folder", folderId: folder.id },
   });
   function setFolderRowRef(node: HTMLButtonElement | null) {
-    setDragRef(node);
+    if (!isRoot) {
+      setDragRef(node);
+    }
     setDropRef(node);
   }
 
-  const display = resolveFolderDisplay(settings);
+  // Every folder row shows an icon and its name. A folder with a custom
+  // uploaded icon renders that icon (keyed by its own id); one without renders
+  // the single shared default folder icon.
+  const iconKey = settings.hasCustomIcon ? folder.id : DEFAULT_FOLDER_ICON_KEY;
   const isActive = activeFolderId === folder.id;
   const hasChildren = subfolders.length > 0;
-
-  async function handleDisplayChange(next: FolderSidebarDisplay) {
-    await setFolderSidebarDisplay(folder.id, next);
-    reload();
-  }
-
-  async function handleIconChange(hasCustomIcon: boolean) {
-    await setFolderHasCustomIcon(folder.id, hasCustomIcon);
-    reload();
-  }
 
   return (
     <li>
@@ -128,69 +95,42 @@ export function FolderTreeNode({
         <button
           ref={setFolderRowRef}
           type="button"
-          className={`folder-select${isDragging ? " folder-select--dragging" : ""}`}
+          className={`folder-select${!isRoot && isDragging ? " folder-select--dragging" : ""}`}
           onClick={() => onSelectFolder(folder.id)}
-          title={display === "icon-only" ? folder.title : undefined}
-          style={{ transform: CSS.Translate.toString(transform) }}
-          {...listeners}
-          {...attributes}
+          style={
+            isRoot
+              ? undefined
+              : { transform: CSS.Translate.toString(transform) }
+          }
+          {...(isRoot ? {} : listeners)}
+          {...(isRoot ? {} : attributes)}
         >
-          {display !== "label-only" && (
-            <CustomIconImage
-              itemId={folder.id}
-              alt={folder.title}
-              version={version}
-            />
-          )}
-          {display !== "icon-only" && (
-            <span className="folder-label">{folder.title}</span>
-          )}
+          {/* The row always shows the name, so the icon is decorative
+              (empty alt) — it neither doubles the button's accessible name
+              nor needs its own announcement. */}
+          <CustomIconImage itemId={iconKey} alt="" version={version} />
+          <span className="folder-label">{folder.title}</span>
         </button>
 
-        <button
-          ref={settingsToggleRef}
-          type="button"
-          className="folder-settings-toggle"
-          aria-label="Folder display settings"
-          onClick={() => onOpenSettings(settingsOpen ? undefined : folder.id)}
-        >
-          ⚙
-        </button>
+        {!isRoot && (
+          <button
+            type="button"
+            className="folder-settings-toggle"
+            aria-label="Folder settings"
+            onClick={() => onOpenSettings(settingsOpen ? undefined : folder.id)}
+          >
+            ⚙
+          </button>
+        )}
 
         {settingsOpen && (
-          <div
-            ref={settingsPanelRef}
-            className="folder-settings-panel"
-            role="group"
-          >
-            {settings.hasCustomIcon && (
-              <FolderIconPreview
-                folderId={folder.id}
-                alt={folder.title}
-                version={version}
-              />
-            )}
-            {DISPLAY_OPTIONS.map((option) => (
-              <label key={option.value} className="folder-settings-option">
-                <input
-                  type="radio"
-                  name={`folder-display-${folder.id}`}
-                  value={option.value}
-                  checked={settings.sidebarDisplay === option.value}
-                  disabled={
-                    !settings.hasCustomIcon && option.value !== "label-only"
-                  }
-                  onChange={() => void handleDisplayChange(option.value)}
-                />
-                {option.label}
-              </label>
-            ))}
-            <IconUploadControls
-              itemId={folder.id}
-              hasCustomIcon={settings.hasCustomIcon}
-              onChange={(hasCustomIcon) => void handleIconChange(hasCustomIcon)}
-            />
-          </div>
+          <FolderSettingsWindow
+            folder={folder}
+            settings={settings}
+            iconVersion={version}
+            onSaved={reload}
+            onClose={() => onOpenSettings(undefined)}
+          />
         )}
       </div>
 

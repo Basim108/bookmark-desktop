@@ -161,6 +161,40 @@ export function installChromeMock() {
           node,
         });
       }),
+      removeTree: vi.fn(async (id: string): Promise<void> => {
+        const node = bookmarkNodes.get(id);
+        if (!node) throw new Error(`No such bookmark node: ${id}`);
+        // Build the removed node's subtree so onRemoved carries children the
+        // same way Chrome delivers a removeTree, then drop every descendant
+        // from the flat node map.
+        function collectSubtree(
+          nodeId: string,
+        ): chrome.bookmarks.BookmarkTreeNode {
+          const current = bookmarkNodes.get(nodeId)!;
+          const children = [...bookmarkNodes.values()]
+            .filter((child) => child.parentId === nodeId)
+            .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+            .map((child) => collectSubtree(child.id));
+          return children.length > 0
+            ? { ...current, children }
+            : { ...current };
+        }
+        function deleteSubtree(nodeId: string) {
+          for (const child of [...bookmarkNodes.values()].filter(
+            (candidate) => candidate.parentId === nodeId,
+          )) {
+            deleteSubtree(child.id);
+          }
+          bookmarkNodes.delete(nodeId);
+        }
+        const subtree = collectSubtree(id);
+        deleteSubtree(id);
+        bookmarksEvents.onRemoved.emit(id, {
+          parentId: node.parentId ?? "",
+          index: node.index ?? 0,
+          node: subtree,
+        });
+      }),
     },
   };
 

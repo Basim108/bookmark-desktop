@@ -163,7 +163,6 @@ describe("onRemoved", () => {
     await flush();
 
     expect(await getFolderSettings("f1")).toEqual({
-      sidebarDisplay: "label-only",
       hasCustomIcon: false,
     });
     expect(await getIcon("f1")).toBeUndefined();
