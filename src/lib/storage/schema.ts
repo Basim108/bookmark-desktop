@@ -14,6 +14,27 @@ export interface FolderSettings {
   hasCustomIcon: boolean;
 }
 
+/** How a canvas background image is fitted to the canvas area. */
+export type BackgroundFit = "cover" | "contain" | "center";
+
+/**
+ * The canvas background. `none` means no background image. `upload` means an
+ * image is stored in IndexedDB under the reserved canvas-background key (see
+ * canvasBackground.ts); only its fit mode is kept here so the canvas can decide
+ * how to render without an async IndexedDB read blocking layout.
+ */
+export type CanvasBackground =
+  { kind: "none" } | { kind: "upload"; fit: BackgroundFit };
+
+/**
+ * Global, page-wide settings (not tied to any one folder or bookmark). Held as
+ * a single object so future global settings are added as fields rather than new
+ * top-level storage keys.
+ */
+export interface GeneralSettings {
+  background: CanvasBackground;
+}
+
 export type BookmarkLabelDisplay = "under-icon" | "tooltip";
 
 /** A bookmark's own display settings. Independent per bookmark — no inheritance (same shape of rule as FolderSettings). */
@@ -37,6 +58,8 @@ export interface StorageSchema {
   folderSettings: Record<string, FolderSettings>;
   /** User-resized sidebar width in px. */
   sidebarWidth: number;
+  /** Global, page-wide settings (e.g. the canvas background). */
+  generalSettings: GeneralSettings;
 }
 
 export const STORAGE_KEYS = {
@@ -44,4 +67,5 @@ export const STORAGE_KEYS = {
   BOOKMARK_SETTINGS: "bookmarkSettings",
   FOLDER_SETTINGS: "folderSettings",
   SIDEBAR_WIDTH: "sidebarWidth",
+  GENERAL_SETTINGS: "generalSettings",
 } as const satisfies Record<string, keyof StorageSchema>;

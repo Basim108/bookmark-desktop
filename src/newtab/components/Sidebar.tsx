@@ -9,6 +9,8 @@ interface SidebarProps {
   onSelectFolder: (folderId: string) => void;
   /** Current viewport width, used to pick the sidebar's max-width tier. */
   viewportWidth: number;
+  /** Opens the global General Settings window (invoked by the header's hamburger button). */
+  onOpenSettings: () => void;
 }
 
 export function Sidebar({
@@ -17,6 +19,7 @@ export function Sidebar({
   activeFolderId,
   onSelectFolder,
   viewportWidth,
+  onOpenSettings,
 }: SidebarProps) {
   const { width, isDragging, startDrag } = useSidebarResize(viewportWidth);
   const [openSettingsFolderId, setOpenSettingsFolderId] = useState<
@@ -33,9 +36,26 @@ export function Sidebar({
     />
   );
 
+  // Fixed header band above the scrollable folder tree. Its only control is the
+  // hamburger button that opens the global settings window; it is not a folder
+  // row (no name, icon, expand toggle, selection, or drag/drop).
+  const header = (
+    <div className="sidebar-header">
+      <button
+        type="button"
+        className="sidebar-settings-button"
+        aria-label="Open settings"
+        onClick={onOpenSettings}
+      >
+        ☰
+      </button>
+    </div>
+  );
+
   if (loading) {
     return (
       <nav className="sidebar" aria-label="Bookmark folders" style={{ width }}>
+        {header}
         <div className="sidebar-scroll-area">
           <p className="sidebar-loading">Loading folders…</p>
         </div>
@@ -50,6 +70,7 @@ export function Sidebar({
       aria-label="Bookmark folders"
       style={{ width }}
     >
+      {header}
       <div className="sidebar-scroll-area">
         <ul className="folder-tree">
           {rootFolders.map((folder) => (

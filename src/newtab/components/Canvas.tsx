@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import type { CSSProperties } from "react";
 import { useDndMonitor } from "@dnd-kit/core";
 import type { DragEndEvent, DragMoveEvent } from "@dnd-kit/core";
 import { resolveDrop } from "../../lib/grid/dragDrop";
@@ -11,6 +12,8 @@ interface CanvasProps {
   folderId: string;
   /** Reports the canvas's current tier label font-size upward whenever it changes, so an ancestor can apply it as a shared CSS variable (see App). */
   onLabelFontSizeChange?: (labelFontSize: string) => void;
+  /** Background-image style (image + size/position per fit) applied to the canvas area only. Empty when no background is set. */
+  backgroundStyle?: CSSProperties;
 }
 
 function cellKey(row: number, col: number): string {
@@ -23,7 +26,11 @@ function parseCellKey(key: string): { row: number; col: number } | null {
   return { row: Number(match[1]), col: Number(match[2]) };
 }
 
-export function Canvas({ folderId, onLabelFontSizeChange }: CanvasProps) {
+export function Canvas({
+  folderId,
+  onLabelFontSizeChange,
+  backgroundStyle,
+}: CanvasProps) {
   const {
     containerRef,
     capacity,
@@ -90,7 +97,12 @@ export function Canvas({ folderId, onLabelFontSizeChange }: CanvasProps) {
   });
 
   return (
-    <div className="canvas" data-folder-id={folderId} ref={containerRef}>
+    <div
+      className="canvas"
+      data-folder-id={folderId}
+      ref={containerRef}
+      style={backgroundStyle}
+    >
       {loading ? (
         <p className="canvas-loading">Loading…</p>
       ) : (

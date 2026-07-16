@@ -27,8 +27,10 @@ const collisionDetection: CollisionDetection = (args) => {
 };
 import { Canvas } from "./components/Canvas";
 import { Sidebar } from "./components/Sidebar";
+import { GeneralSettingsWindow } from "./components/GeneralSettingsWindow";
 import { useSubfolders } from "./hooks/useSubfolders";
 import { useElementSize } from "./hooks/useElementSize";
+import { useCanvasBackground } from "./hooks/useCanvasBackground";
 import { moveNodeToFolder } from "../lib/bookmarks/move";
 import { resolveCrossFolderDrop } from "../lib/bookmarks/dragResolve";
 import { forceBookmarkResync } from "../lib/bookmarks/events";
@@ -94,6 +96,12 @@ function AppContent() {
   // sidebar's max-width tiers, reusing the same ResizeObserver pattern
   // useGridLayout already uses for the canvas instead of a window listener.
   const { ref: appRef, size: appSize } = useElementSize<HTMLDivElement>();
+  // Global canvas background (applied to .canvas only), plus the open state for
+  // the General Settings window. Lifted here (rather than inside Sidebar) so the
+  // window and the canvas share one background source, and the window can mount
+  // above both regions.
+  const canvasBackground = useCanvasBackground();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   // Mirrors the canvas's own tier-resolved label font-size (reported by
   // Canvas, which measures itself independently of .app/sidebar width) so
   // the sidebar's folder labels can share it via inheritance. Defaults to
@@ -113,14 +121,24 @@ function AppContent() {
         activeFolderId={activeFolderId}
         onSelectFolder={setSelectedFolderId}
         viewportWidth={appSize.width}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
       {activeFolderId ? (
         <Canvas
           folderId={activeFolderId}
           onLabelFontSizeChange={setLabelFontSize}
+          backgroundStyle={canvasBackground.style}
         />
       ) : (
         <p className="canvas-empty">No bookmark folders found.</p>
+      )}
+      {settingsOpen && (
+        <GeneralSettingsWindow
+          background={canvasBackground.background}
+          savedBackgroundUrl={canvasBackground.backgroundUrl}
+          onSaved={canvasBackground.reload}
+          onClose={() => setSettingsOpen(false)}
+        />
       )}
     </div>
   );

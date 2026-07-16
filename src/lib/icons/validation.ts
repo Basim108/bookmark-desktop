@@ -1,4 +1,5 @@
 export const MAX_ICON_FILE_SIZE_BYTES = 1_000_000; // 1 MB
+export const MAX_BACKGROUND_FILE_SIZE_BYTES = 10_000_000; // 10 MB
 
 export type AcceptedIconFormat = "png" | "jpeg" | "webp" | "avif";
 
@@ -72,15 +73,17 @@ async function canDecodeImage(blob: Blob): Promise<boolean> {
 }
 
 /**
- * Full upload-validation pipeline for a user-selected icon file. File size
+ * Shared upload-validation pipeline for a user-selected image file. File size
  * and a magic-byte header check are cheap and run before the decode check,
  * which requires fully decoding the image. Pixel dimensions are unbounded —
- * every rendering site scales the icon down to fit its own display size.
+ * every rendering site scales the image to fit its own display size. The only
+ * thing that varies by call site is the maximum file size.
  */
-export async function validateIconFile(
+async function validateImageFile(
   file: File,
+  maxSizeBytes: number,
 ): Promise<IconValidationResult> {
-  if (file.size > MAX_ICON_FILE_SIZE_BYTES) {
+  if (file.size > maxSizeBytes) {
     return { ok: false, error: "file-too-large" };
   }
 
@@ -95,4 +98,20 @@ export async function validateIconFile(
   }
 
   return { ok: true };
+}
+
+/** Validates a user-selected icon file (≤ 1 MB; png/jpeg/webp/avif). */
+export function validateIconFile(file: File): Promise<IconValidationResult> {
+  return validateImageFile(file, MAX_ICON_FILE_SIZE_BYTES);
+}
+
+/**
+ * Validates a user-selected canvas background image. Same accepted formats and
+ * decode check as icons, but with a larger 10 MB cap, since a full-canvas
+ * background is legitimately much bigger than an icon.
+ */
+export function validateBackgroundFile(
+  file: File,
+): Promise<IconValidationResult> {
+  return validateImageFile(file, MAX_BACKGROUND_FILE_SIZE_BYTES);
 }
