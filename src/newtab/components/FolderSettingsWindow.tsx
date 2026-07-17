@@ -1,14 +1,31 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import { removeFolder, updateFolderTitle } from "../../lib/bookmarks/edit";
 import { ICON_ERROR_MESSAGES } from "../../lib/icons/errorMessages";
 import { validateIconFile } from "../../lib/icons/validation";
+import { importUtabExport } from "../../lib/import/utab";
+import type { UtabImportSummary } from "../../lib/import/utab";
 import { setFolderHasCustomIcon } from "../../lib/storage/folderSettings";
 import { DEFAULT_FOLDER_ICON_KEY } from "../../lib/storage/defaultFolderIcon";
 import { deleteIcon, putIcon } from "../../lib/storage/iconDb";
 import type { FolderSettings } from "../../lib/storage/schema";
 import { CustomIconImage } from "./CustomIconImage";
+
+function pluralize(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+/** Human-readable summary of an import, e.g. "Imported 2 folders, 24 bookmarks — skipped 1." */
+function formatImportSummary(summary: UtabImportSummary): string {
+  const base = `Imported ${pluralize(summary.foldersCreated, "folder")}, ${pluralize(
+    summary.bookmarksCreated,
+    "bookmark",
+  )}`;
+  return summary.skipped > 0
+    ? `${base} — skipped ${summary.skipped}.`
+    : `${base}.`;
+}
 
 interface FolderSettingsWindowProps {
   folder: chrome.bookmarks.BookmarkTreeNode;
@@ -58,6 +75,12 @@ export function FolderSettingsWindow({
   const [iconError, setIconError] = useState<string | undefined>(undefined);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [importMenuOpen, setImportMenuOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | undefined>(
+    undefined,
+  );
+  const importFileInputRef = useRef<HTMLInputElement>(null);
 
   const nameValid = name.trim().length > 0;
   const canSave = nameValid && !saving;
@@ -107,6 +130,38 @@ export function FolderSettingsWindow({
   function handleRemoveImage() {
     setIconError(undefined);
     setPendingIcon({ kind: "removed" });
+  }
+
+  // Opening the OS file picker must happen synchronously inside a user-gesture
+  // handler, so the menu item triggers the hidden input's click directly.
+  function handleImportUtabClick() {
+    setImportMenuOpen(false);
+    importFileInputRef.current?.click();
+  }
+
+  async function handleImportFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || importing) return;
+    setImporting(true);
+    setImportResult(undefined);
+
+    const text = await file.text();
+    const result = await importUtabExport(folder.id, text);
+    setImporting(false);
+
+    if (!result.ok) {
+      setImportResult(
+        result.error === "invalid-json"
+          ? "That file isn’t valid JSON."
+          : "That file isn’t a uTab export.",
+      );
+      return;
+    }
+    setImportResult(formatImportSummary(result.summary));
+    // Import creates real bookmarks/folders immediately (not a staged edit), so
+    // refresh the caller without closing the window — the summary stays visible.
+    onSaved();
   }
 
   async function handleSave() {
@@ -256,6 +311,49 @@ export function FolderSettingsWindow({
               Enter a folder name.
             </p>
           )}
+
+          <div className="folder-settings-window-import">
+            <button
+              type="button"
+              className="folder-settings-window-import-toggle"
+              aria-haspopup="menu"
+              aria-expanded={importMenuOpen}
+              disabled={importing}
+              onClick={() => setImportMenuOpen((open) => !open)}
+            >
+              Import Bookmarks ▾
+            </button>
+            {importMenuOpen && (
+              <div className="folder-settings-window-import-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="folder-settings-window-import-item"
+                  onClick={handleImportUtabClick}
+                >
+                  Import uTab
+                </button>
+              </div>
+            )}
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              aria-label="Import bookmarks file"
+              className="folder-settings-window-upload-input"
+              onChange={(event) => void handleImportFileChange(event)}
+            />
+            {importing && (
+              <p className="folder-settings-window-hint" role="status">
+                Importing…
+              </p>
+            )}
+            {!importing && importResult && (
+              <p className="folder-settings-window-import-result" role="status">
+                {importResult}
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="folder-settings-window-actions">

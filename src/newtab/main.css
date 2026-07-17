@@ -631,7 +631,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding: 20px;
+  /* Extra 20px of bottom room so the right-aligned "Import Bookmarks" menu can
+     open without overlapping the footer's Remove/Save buttons. */
+  padding: 20px 20px 40px;
 }
 
 .folder-settings-window-icon-row {
@@ -717,6 +719,70 @@ body {
   margin: 0;
   font-size: 0.8rem;
   color: light-dark(#b00020, #ff6b6b);
+}
+
+.folder-settings-window-import {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.folder-settings-window-import-toggle {
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 0.9rem;
+  color: inherit;
+  background: none;
+  border: 1px solid light-dark(#ccc, #555);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.folder-settings-window-import-toggle:hover:not(:disabled) {
+  background: light-dark(rgb(0 0 0 / 4%), rgb(255 255 255 / 8%));
+}
+
+.folder-settings-window-import-toggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.folder-settings-window-import-menu {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  z-index: 1;
+  min-width: 160px;
+  padding: 4px;
+  background: light-dark(#fff, #2a2a2a);
+  border: 1px solid light-dark(#ccc, #555);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 20%);
+}
+
+.folder-settings-window-import-item {
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.folder-settings-window-import-item:hover {
+  background: light-dark(rgb(0 0 0 / 6%), rgb(255 255 255 / 10%));
+}
+
+.folder-settings-window-import-result {
+  margin: 0;
+  font-size: 0.85rem;
+  color: light-dark(#555, #b0b0b0);
 }
 
 .folder-settings-window-field {

@@ -73,14 +73,16 @@ async function canDecodeImage(blob: Blob): Promise<boolean> {
 }
 
 /**
- * Shared upload-validation pipeline for a user-selected image file. File size
- * and a magic-byte header check are cheap and run before the decode check,
- * which requires fully decoding the image. Pixel dimensions are unbounded —
- * every rendering site scales the image to fit its own display size. The only
- * thing that varies by call site is the maximum file size.
+ * Shared upload-validation pipeline for an image blob. File size and a
+ * magic-byte header check are cheap and run before the decode check, which
+ * requires fully decoding the image. Pixel dimensions are unbounded — every
+ * rendering site scales the image to fit its own display size. The only thing
+ * that varies by call site is the maximum file size. Accepts any Blob (a File
+ * is a Blob) so a base64 data URL decoded during import can reuse the exact
+ * same checks as a user-selected upload.
  */
 async function validateImageFile(
-  file: File,
+  file: Blob,
   maxSizeBytes: number,
 ): Promise<IconValidationResult> {
   if (file.size > maxSizeBytes) {
@@ -100,8 +102,8 @@ async function validateImageFile(
   return { ok: true };
 }
 
-/** Validates a user-selected icon file (≤ 1 MB; png/jpeg/webp/avif). */
-export function validateIconFile(file: File): Promise<IconValidationResult> {
+/** Validates an icon image (≤ 1 MB; png/jpeg/webp/avif). Accepts a File upload or a Blob decoded from an import's data URL. */
+export function validateIconFile(file: Blob): Promise<IconValidationResult> {
   return validateImageFile(file, MAX_ICON_FILE_SIZE_BYTES);
 }
 
@@ -111,7 +113,7 @@ export function validateIconFile(file: File): Promise<IconValidationResult> {
  * background is legitimately much bigger than an icon.
  */
 export function validateBackgroundFile(
-  file: File,
+  file: Blob,
 ): Promise<IconValidationResult> {
   return validateImageFile(file, MAX_BACKGROUND_FILE_SIZE_BYTES);
 }

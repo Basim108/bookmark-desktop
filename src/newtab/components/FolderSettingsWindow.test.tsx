@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { installChromeMock } from "../../test/chromeMock";
+import { getBookmarksInFolder, getSubfolders } from "../../lib/bookmarks/read";
 import {
   DEFAULT_FOLDER_SETTINGS,
   getFolderSettings,
@@ -193,5 +194,70 @@ describe("FolderSettingsWindow", () => {
     expect(mock.chrome.bookmarks.removeTree).toHaveBeenCalledWith("f1");
     expect(mock.chrome.bookmarks.remove).not.toHaveBeenCalled();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+});
+
+function jsonFile(value: unknown, name = "utab.json"): File {
+  return new File([JSON.stringify(value)], name, {
+    type: "application/json",
+  });
+}
+
+describe("FolderSettingsWindow — import", () => {
+  it("offers an Import Bookmarks dropdown with an Import uTab item", async () => {
+    const user = userEvent.setup();
+    renderWindow();
+
+    // Menu closed initially.
+    expect(
+      screen.queryByRole("menuitem", { name: "Import uTab" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Import Bookmarks/ }));
+    expect(
+      screen.getByRole("menuitem", { name: "Import uTab" }),
+    ).toBeInTheDocument();
+  });
+
+  it("imports a chosen uTab file into this folder and shows a summary", async () => {
+    stubImageBitmap();
+    const user = userEvent.setup();
+    const { onSaved } = renderWindow({ folder: folderNode("f9", "Target") });
+
+    const file = jsonFile({
+      folders: [
+        {
+          name: "Work",
+          bookmarks: [
+            { title: "Alpha", url: "https://alpha.example" },
+            { title: "Beta", url: "https://beta.example" },
+          ],
+        },
+      ],
+    });
+
+    await user.upload(screen.getByLabelText("Import bookmarks file"), file);
+
+    await screen.findByText("Imported 1 folder, 2 bookmarks.");
+
+    const subfolders = await getSubfolders("f9");
+    expect(subfolders.map((f) => f.title)).toEqual(["Work"]);
+    const bookmarks = await getBookmarksInFolder(subfolders[0]!.id);
+    expect(bookmarks.map((b) => b.title)).toEqual(["Alpha", "Beta"]);
+    expect(onSaved).toHaveBeenCalled();
+  });
+
+  it("shows an error and creates nothing for a file that isn't valid JSON", async () => {
+    const user = userEvent.setup();
+    renderWindow({ folder: folderNode("f10", "Target") });
+
+    const file = new File(["{ not json"], "bad.json", {
+      type: "application/json",
+    });
+
+    await user.upload(screen.getByLabelText("Import bookmarks file"), file);
+
+    await screen.findByText("That file isn’t valid JSON.");
+    expect(await getSubfolders("f10")).toEqual([]);
   });
 });

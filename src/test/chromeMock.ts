@@ -25,6 +25,7 @@ function createEvent<T extends (...args: never[]) => void>() {
 export function installChromeMock() {
   const storage = new Map<string, unknown>();
   const bookmarkNodes = new Map<string, chrome.bookmarks.BookmarkTreeNode>();
+  let generatedIdCounter = 0;
 
   const storageOnChanged =
     createEvent<
@@ -114,6 +115,28 @@ export function installChromeMock() {
     },
     bookmarks: {
       ...bookmarksEvents,
+      create: vi.fn(
+        async (
+          details: chrome.bookmarks.CreateDetails,
+        ): Promise<chrome.bookmarks.BookmarkTreeNode> => {
+          const id = `gen-${++generatedIdCounter}`;
+          const parentId = details.parentId ?? "1";
+          const index = [...bookmarkNodes.values()].filter(
+            (node) => node.parentId === parentId,
+          ).length;
+          const node: chrome.bookmarks.BookmarkTreeNode = {
+            id,
+            parentId,
+            index,
+            title: details.title ?? "",
+            syncing: false,
+            ...(details.url !== undefined ? { url: details.url } : {}),
+          };
+          bookmarkNodes.set(id, node);
+          bookmarksEvents.onCreated.emit(id, node);
+          return node;
+        },
+      ),
       getChildren: vi.fn(
         async (id: string): Promise<chrome.bookmarks.BookmarkTreeNode[]> => {
           return [...bookmarkNodes.values()]
@@ -212,6 +235,9 @@ export function installChromeMock() {
     reset() {
       storage.clear();
       bookmarkNodes.clear();
+      // Deliberately does NOT reset generatedIdCounter: Chrome never reuses a
+      // bookmark id, and stored icons (in IndexedDB) can outlive a reset, so
+      // reusing ids across tests would surface a stale icon on a fresh node.
       for (const event of Object.values(bookmarksEvents)) {
         event.clearListeners();
       }

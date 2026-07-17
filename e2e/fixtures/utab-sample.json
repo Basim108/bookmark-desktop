@@ -1,0 +1,19 @@
+{
+  "folders": [
+    {
+      "name": "Imported Folder",
+      "preview": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
+      "bookmarks": [
+        {
+          "title": "Imported Alpha",
+          "url": "https://example.com/imported-alpha",
+          "preview": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+        },
+        {
+          "title": "Imported Beta",
+          "url": "https://example.com/imported-beta"
+        }
+      ]
+    }
+  ]
+}
