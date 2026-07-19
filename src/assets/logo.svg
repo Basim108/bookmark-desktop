@@ -1,0 +1,11 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Bookmark Desktop logo: a launchpad grid of rounded tiles, one accent.
+       Master source; PNG icon sizes are generated from this (scripts/generate-icons.mjs). -->
+  <!-- Rounded-square container so tiles keep contrast on light and dark toolbars. -->
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="#f1f3f4" stroke="#d5d9de" stroke-width="2"/>
+  <!-- 2x2 grid of rounded tiles: three neutral, bottom-right in the product accent. -->
+  <rect x="26" y="26" width="34" height="34" rx="10" fill="#a7adb6"/>
+  <rect x="68" y="26" width="34" height="34" rx="10" fill="#a7adb6"/>
+  <rect x="26" y="68" width="34" height="34" rx="10" fill="#a7adb6"/>
+  <rect x="68" y="68" width="34" height="34" rx="10" fill="#1a73e8"/>
+</svg>
