@@ -44,7 +44,14 @@ jobs:
             cat PRIVACY.md
           } > build/privacy.md
 
+      # enablement: true creates the Pages site (build_type: workflow) on the
+      # first run instead of requiring someone to flip Settings > Pages >
+      # Source to "GitHub Actions" by hand first. Without it this step fails
+      # with "Get Pages site failed" on a repo where Pages was never enabled,
+      # which is a confusing way to learn about a missing settings toggle.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/jekyll-build-pages@v1
         with:

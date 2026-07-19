@@ -100,10 +100,12 @@ store listing.
 
 Notes on the setup:
 
-- Pages is configured with **Source: GitHub Actions**, not "Deploy from a
-  branch". The branch option only serves the repo root or `/docs`, and `/docs`
-  would have published this file — internal submission notes — alongside the
-  policy. The workflow publishes the policy page and nothing else.
+- Pages uses **Source: GitHub Actions**, not "Deploy from a branch". The branch
+  option only serves the repo root or `/docs`, and `/docs` would have published
+  this file — internal submission notes — alongside the policy. The workflow
+  publishes the policy page and nothing else.
+- No manual settings change is needed: the workflow enables Pages itself on its
+  first run (`configure-pages` with `enablement: true`).
 - The site is rebuilt on any push to `main` that touches `PRIVACY.md`,
   `site/**`, or the workflow itself, and can be run on demand from the Actions
   tab (`workflow_dispatch`).
