@@ -1,21 +1,26 @@
 import { createBookmark, createFolder } from "../bookmarks/create";
 import { getFolderChildren, isFolder } from "../bookmarks/read";
-import { validateIconFile } from "../icons/validation";
+import { validateBackgroundFile, validateIconFile } from "../icons/validation";
 import { dataUrlToBlob } from "../import/dataUrl";
 import {
-  setBookmarkLabelDisplay,
-  setBookmarkHasCustomIcon,
+  DEFAULT_BOOKMARK_SETTINGS,
+  replaceAllBookmarkSettings,
 } from "../storage/bookmarkSettings";
 import {
   deleteCanvasBackground,
   putCanvasBackground,
 } from "../storage/canvasBackground";
 import { DEFAULT_FOLDER_ICON_KEY } from "../storage/defaultFolderIcon";
-import { setFolderHasCustomIcon } from "../storage/folderSettings";
+import { replaceAllFolderSettings } from "../storage/folderSettings";
 import { setGeneralSettings } from "../storage/generalSettings";
-import { deleteIcon, putIcon } from "../storage/iconDb";
-import { setFolderPositions } from "../storage/positions";
-import type { FolderPositions, GeneralSettings } from "../storage/schema";
+import { deleteIcon, pruneIconsExcept, putIcon } from "../storage/iconDb";
+import { replaceAllPositions } from "../storage/positions";
+import type {
+  BookmarkSettings,
+  FolderPositions,
+  FolderSettings,
+  GeneralSettings,
+} from "../storage/schema";
 import { setSidebarWidth } from "../storage/sidebarSettings";
 import { acquireTransferLock, releaseTransferLock } from "./lock";
 import { PROTECTED_ROOT_IDS, ROOT_DISPLAY_NAMES } from "./roots";
@@ -58,25 +63,45 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-/** Attaches an inline base64 icon to a created node, mirroring the uTab importer's swallow-and-fall-back behavior for a bad icon. */
+/**
+ * Attaches an inline base64 icon to a created node, mirroring the uTab
+ * importer's swallow-and-fall-back behavior for a bad icon. Records the id in
+ * the accumulator's keep-set so the post-import sweep does not prune the blob
+ * it just wrote.
+ */
 async function attachIcon(
+  acc: ImportAccumulator,
   itemId: string,
   icon: unknown,
-  setHasCustomIcon: (id: string, value: boolean) => Promise<void>,
-): Promise<void> {
-  if (typeof icon !== "string") return;
+): Promise<boolean> {
+  if (typeof icon !== "string") return false;
   const blob = dataUrlToBlob(icon);
-  if (!blob) return;
+  if (!blob) return false;
   const result = await validateIconFile(blob);
-  if (!result.ok) return;
+  if (!result.ok) return false;
   await putIcon(itemId, blob);
-  await setHasCustomIcon(itemId, true);
+  acc.iconIds.add(itemId);
+  return true;
 }
 
+/**
+ * Counts, skips, and the keep-set the post-import sweep prunes to.
+ *
+ * The per-item stores are accumulated here and written once at the end rather
+ * than through the merging per-item setters, for two reasons: the sweep needs
+ * the exact set of entries the import wrote (see the replace-strategy
+ * requirement — the replaced tree's data must not survive), and a single
+ * whole-map write avoids one read-modify-write per created item.
+ */
 interface ImportAccumulator {
   foldersCreated: number;
   bookmarksCreated: number;
   skipped: SkippedEntryRecord[];
+  /** Ids that got a custom icon blob; the icon sweep keeps exactly these. */
+  iconIds: Set<string>;
+  positions: Record<string, FolderPositions>;
+  bookmarkSettings: Record<string, BookmarkSettings>;
+  folderSettings: Record<string, FolderSettings>;
 }
 
 function recordSkip(
@@ -142,16 +167,22 @@ async function createChildren(
       }
       acc.bookmarksCreated++;
       const newId = result.node.id;
-      await attachIcon(
+      const hasCustomIcon = await attachIcon(
+        acc,
         newId,
         (child as { icon?: unknown }).icon,
-        setBookmarkHasCustomIcon,
       );
-      if (
+      const tooltipOnly =
         (child as { settings?: { labelDisplay?: unknown } })?.settings
-          ?.labelDisplay === "tooltip"
-      ) {
-        await setBookmarkLabelDisplay(newId, "tooltip");
+          ?.labelDisplay === "tooltip";
+      // Only record non-default settings; readers fall back to the defaults, so
+      // storing them would just bloat the map the sweep writes back.
+      if (hasCustomIcon || tooltipOnly) {
+        acc.bookmarkSettings[newId] = {
+          ...DEFAULT_BOOKMARK_SETTINGS,
+          ...(hasCustomIcon ? { hasCustomIcon: true } : {}),
+          ...(tooltipOnly ? { labelDisplay: "tooltip" as const } : {}),
+        };
       }
       const position = (child as { position?: unknown }).position;
       if (isGridCell(position)) {
@@ -168,11 +199,9 @@ async function createChildren(
     }
     acc.foldersCreated++;
     const newId = result.node.id;
-    await attachIcon(
-      newId,
-      (child as { icon?: unknown }).icon,
-      setFolderHasCustomIcon,
-    );
+    if (await attachIcon(acc, newId, (child as { icon?: unknown }).icon)) {
+      acc.folderSettings[newId] = { hasCustomIcon: true };
+    }
     await createChildren(
       asArray((child as { children?: unknown }).children),
       newId,
@@ -181,9 +210,11 @@ async function createChildren(
     );
   }
 
-  // Authoritative per-folder position write (no competing writer under the lock).
+  // Authoritative per-folder positions (no competing writer under the lock).
+  // Accumulated rather than written here — the whole map is written once after
+  // the root pass, so the replaced tree's positions cannot survive.
   if (Object.keys(positions).length > 0) {
-    await setFolderPositions(parentNewId, positions);
+    acc.positions[parentNewId] = positions;
   }
 }
 
@@ -227,29 +258,40 @@ async function restoreGeneral(general: unknown): Promise<void> {
 
   await restoreGlobalIcon(
     block.canvasBackgroundIcon,
+    validateBackgroundFile,
     putCanvasBackground,
     deleteCanvasBackground,
   );
   await restoreGlobalIcon(
     block.defaultFolderIcon,
+    validateIconFile,
     (blob) => putIcon(DEFAULT_FOLDER_ICON_KEY, blob),
     () => deleteIcon(DEFAULT_FOLDER_ICON_KEY),
   );
 }
 
+/**
+ * Restores one of the two global reserved-key images from the backup.
+ *
+ * Validated with the same magic-byte + decode + size check the per-item icon
+ * path uses: the file is user-supplied and may be hand-edited, and this path
+ * writes to storage with no id-based bound on size. Failure clears the target
+ * rather than aborting the import, mirroring attachIcon's swallow-and-fall-back.
+ */
 async function restoreGlobalIcon(
   value: unknown,
+  validate: (blob: Blob) => Promise<{ ok: boolean }>,
   put: (blob: Blob) => Promise<void>,
   clear: () => Promise<void>,
 ): Promise<void> {
   if (typeof value === "string") {
     const blob = dataUrlToBlob(value);
-    if (blob) {
+    if (blob && (await validate(blob)).ok) {
       await put(blob);
       return;
     }
   }
-  // null / absent / undecodable → clear so the target matches the file.
+  // null / absent / undecodable / invalid → clear so the target matches the file.
   await clear();
 }
 
@@ -295,6 +337,10 @@ export async function importState(
     foldersCreated: 0,
     bookmarksCreated: 0,
     skipped: [],
+    iconIds: new Set(),
+    positions: {},
+    bookmarkSettings: {},
+    folderSettings: {},
   };
 
   await acquireTransferLock();
@@ -347,6 +393,20 @@ export async function importState(
       // Delete the previously existing children last (root already repopulated).
       await deleteChildren(oldChildren);
     }
+
+    // Replace the per-item stores with exactly what this import wrote. The
+    // transfer lock suspends the onRemoved cleanup cascade that would normally
+    // collect the deleted tree's entries, so without this the replaced tree's
+    // positions, settings and icon blobs (up to 1 MB each) are orphaned with no
+    // UI able to reach them again — growing with every restore.
+    //
+    // Deliberately inside the try and after the root pass, never in the finally:
+    // if a root threw, the keep-set is incomplete and pruning against it would
+    // delete data for items that are still live.
+    await replaceAllPositions(acc.positions);
+    await replaceAllBookmarkSettings(acc.bookmarkSettings);
+    await replaceAllFolderSettings(acc.folderSettings);
+    await pruneIconsExcept(acc.iconIds);
 
     await restoreGeneral((data as { general?: unknown }).general);
   } finally {

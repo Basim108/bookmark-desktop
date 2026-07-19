@@ -34,12 +34,24 @@ export function dataUrlToBlob(value: string): Blob | undefined {
  * across page and worker contexts; the Blob's MIME type is preserved so the
  * decoded Blob round-trips with the same `type`.
  */
+/**
+ * Chunk size for the binary-string build below. Kept well under the engine's
+ * argument-count limit for a spread call, which is what caps this rather than
+ * memory.
+ */
+const ENCODE_CHUNK_SIZE = 0x8000;
+
 export async function blobToDataUrl(blob: Blob): Promise<string> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]!);
+  // Built a chunk at a time rather than byte by byte: a 10 MB background image
+  // is ~10M iterations and string concatenations otherwise, on the main thread,
+  // during every export and every pre-import backup.
+  const chunks: string[] = [];
+  for (let i = 0; i < bytes.length; i += ENCODE_CHUNK_SIZE) {
+    chunks.push(
+      String.fromCharCode(...bytes.subarray(i, i + ENCODE_CHUNK_SIZE)),
+    );
   }
   const mimeType = blob.type || "application/octet-stream";
-  return `data:${mimeType};base64,${btoa(binary)}`;
+  return `data:${mimeType};base64,${btoa(chunks.join(""))}`;
 }

@@ -1,14 +1,15 @@
 import defaultFolderIconUrl from "../../assets/folder.png";
-import { getIcon, putIcon } from "./iconDb";
+import { DEFAULT_FOLDER_ICON_KEY, getIcon, putIcon } from "./iconDb";
 
 /**
  * Reserved IndexedDB icon key for the single shared default folder icon.
  * Cannot collide with a real Chrome bookmark id (those are numeric strings),
  * so it lives in the same icon store as per-item custom icons and renders
  * through the same object-URL pipeline (`CustomIconImage`). A folder row that
- * has no custom icon renders this key instead of the folder's own id.
+ * has no custom icon renders this key instead of the folder's own id. Defined
+ * in iconDb so its prune can exempt it from a single source of truth.
  */
-export const DEFAULT_FOLDER_ICON_KEY = "__default_folder_icon__";
+export { DEFAULT_FOLDER_ICON_KEY };
 
 /**
  * Seeds the shared default folder icon into IndexedDB from the bundled asset,

@@ -6,12 +6,15 @@
  * `javascript:` etc.)") before navigating the privileged extension page to
  * a bookmark's URL.
  */
-const ALLOWED_NAVIGATION_SCHEMES = new Set([
-  "http:",
-  "https:",
-  "file:",
-  "ftp:",
-]);
+/*
+ * `file:` and `ftp:` were previously allowed but are deliberately excluded:
+ * Chrome removed FTP support in v88, and renderer-initiated navigation from the
+ * new-tab page to a `file:` URL is blocked ("Not allowed to load local
+ * resource") unless the user separately grants "Allow access to file URLs", so
+ * clicking such a bookmark silently does nothing. Accepting a URL the editor
+ * will never be able to open is worse than rejecting it at edit time.
+ */
+const ALLOWED_NAVIGATION_SCHEMES = new Set(["http:", "https:"]);
 
 export function isSafeNavigationUrl(url: string): boolean {
   try {

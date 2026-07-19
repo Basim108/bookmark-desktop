@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { installChromeMock } from "../../test/chromeMock";
 import {
+  getAllPositions,
   getFolderPositions,
+  replaceAllPositions,
   setBookmarkPosition,
   setBookmarkPositions,
 } from "./positions";
@@ -41,5 +43,30 @@ describe("setBookmarkPositions", () => {
       a: { page: 0, row: 0, col: 2 },
       c: { page: 0, row: 1, col: 0 },
     });
+  });
+});
+
+describe("replaceAllPositions", () => {
+  it("replaces the stored map rather than merging into it", async () => {
+    await setBookmarkPosition("old-folder", "old-bookmark", {
+      page: 0,
+      row: 0,
+      col: 0,
+    });
+
+    await replaceAllPositions({
+      "new-folder": { "new-bookmark": { page: 0, row: 1, col: 2 } },
+    });
+
+    expect(await getAllPositions()).toEqual({
+      "new-folder": { "new-bookmark": { page: 0, row: 1, col: 2 } },
+    });
+    expect(await getFolderPositions("old-folder")).toEqual({});
+  });
+
+  it("empties the store when given an empty map", async () => {
+    await setBookmarkPosition("f1", "a", { page: 0, row: 0, col: 0 });
+    await replaceAllPositions({});
+    expect(await getAllPositions()).toEqual({});
   });
 });

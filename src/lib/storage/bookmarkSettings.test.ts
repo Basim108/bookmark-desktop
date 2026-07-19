@@ -4,6 +4,7 @@ import {
   DEFAULT_BOOKMARK_SETTINGS,
   getBookmarkSettings,
   removeBookmarkSettings,
+  replaceAllBookmarkSettings,
   setBookmarkHasCustomIcon,
   setBookmarkLabelDisplay,
 } from "./bookmarkSettings";
@@ -50,5 +51,27 @@ describe("removeBookmarkSettings", () => {
 
   it("is a no-op when nothing is stored for that bookmark", async () => {
     await expect(removeBookmarkSettings("unknown")).resolves.toBeUndefined();
+  });
+});
+
+describe("replaceAllBookmarkSettings", () => {
+  it("replaces the stored map rather than merging into it", async () => {
+    await setBookmarkHasCustomIcon("old", true);
+
+    await replaceAllBookmarkSettings({
+      new: { labelDisplay: "tooltip", hasCustomIcon: false },
+    });
+
+    expect(await getBookmarkSettings("new")).toEqual({
+      labelDisplay: "tooltip",
+      hasCustomIcon: false,
+    });
+    expect(await getBookmarkSettings("old")).toEqual(DEFAULT_BOOKMARK_SETTINGS);
+  });
+
+  it("empties the store when given an empty map", async () => {
+    await setBookmarkHasCustomIcon("a", true);
+    await replaceAllBookmarkSettings({});
+    expect(await getBookmarkSettings("a")).toEqual(DEFAULT_BOOKMARK_SETTINGS);
   });
 });

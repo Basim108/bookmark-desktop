@@ -7,6 +7,21 @@ interface StoredIcon {
   type: string;
 }
 
+/**
+ * Icon keys that belong to the extension rather than to a bookmark/folder id.
+ * Defined here — rather than in the modules that own each image — because
+ * pruneIconsExcept must know them and those modules already depend on this one;
+ * a second copy of the literals could drift, and a drifted reserved key means
+ * the prune deletes a live global image. They re-export these.
+ */
+export const DEFAULT_FOLDER_ICON_KEY = "__default_folder_icon__";
+export const CANVAS_BACKGROUND_KEY = "__canvas_background__";
+
+const RESERVED_ICON_KEYS: readonly string[] = [
+  DEFAULT_FOLDER_ICON_KEY,
+  CANVAS_BACKGROUND_KEY,
+];
+
 let dbPromise: Promise<IDBDatabase> | undefined;
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -57,6 +72,40 @@ export async function getIcon(itemId: string): Promise<Blob | undefined> {
     },
   );
   return record ? new Blob([record.bytes], { type: record.type }) : undefined;
+}
+
+/**
+ * Deletes every icon record whose key is not in `keep`, in a single readwrite
+ * transaction so no concurrent putIcon can be lost to a read-then-write window.
+ * The reserved global keys are exempt unconditionally — callers pass the set of
+ * live bookmark/folder ids and must not have to remember the globals.
+ *
+ * Used by the state-transfer import: the replace-import runs under a lock that
+ * suspends the per-item removal cleanup, so the importer prunes to the set of
+ * ids it created rather than leaving the replaced tree's blobs orphaned (they
+ * are up to 1 MB each and no UI can reach them again).
+ */
+export async function pruneIconsExcept(
+  keep: ReadonlySet<string>,
+): Promise<void> {
+  const db = await openDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(ICON_STORE, "readwrite");
+    const store = tx.objectStore(ICON_STORE);
+    const request = store.getAllKeys();
+    request.onsuccess = () => {
+      for (const key of request.result) {
+        const id = String(key);
+        if (keep.has(id) || RESERVED_ICON_KEYS.includes(id)) {
+          continue;
+        }
+        store.delete(key);
+      }
+    };
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 export async function deleteIcon(itemId: string): Promise<void> {

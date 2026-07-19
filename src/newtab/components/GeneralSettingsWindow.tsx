@@ -190,6 +190,8 @@ export function GeneralSettingsWindow({
       if (event.key !== "Escape") return;
       // A shown summary must be acknowledged with Reload; don't dismiss it.
       if (summary) return;
+      // A running transfer must not be dismissed out from under itself.
+      if (busy) return;
       // Escape cancels a pending import confirmation (settling its promise)
       // rather than closing the whole window and leaving the import hung.
       if (confirmOpen) {
@@ -202,7 +204,7 @@ export function GeneralSettingsWindow({
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose, confirmOpen, summary]);
+  }, [onClose, confirmOpen, summary, busy]);
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -281,11 +283,18 @@ export function GeneralSettingsWindow({
   // own buttons are the only way out.
   const overlay = confirmOpen ? "confirm" : summary ? "summary" : undefined;
 
+  // `busy` covers the transfer itself. Dismissing mid-import would unmount this
+  // window while importState kept running: the skipped-items report would still
+  // auto-download with nothing on screen to explain it, setSummary would no-op
+  // on the unmounted component, and the user would never get the summary or the
+  // reload prompt — leaving the UI referencing folders the import deleted.
+  const dismissable = !overlay && !busy;
+
   return createPortal(
     <div
       className="general-settings-window-backdrop"
       onClick={(event) => {
-        if (!overlay && event.target === event.currentTarget) onClose();
+        if (dismissable && event.target === event.currentTarget) onClose();
       }}
     >
       <div
@@ -377,7 +386,10 @@ export function GeneralSettingsWindow({
             type="button"
             className="general-settings-window-close"
             aria-label="Close"
-            onClick={onClose}
+            disabled={busy}
+            onClick={() => {
+              if (dismissable) onClose();
+            }}
           >
             ✕
           </button>

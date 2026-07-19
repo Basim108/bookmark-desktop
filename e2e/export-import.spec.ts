@@ -109,3 +109,68 @@ test("export then import restores the bookmark tree and canvas background", asyn
     /^url\("?blob:/,
   );
 });
+
+test("a replace-import leaves no stored data belonging to the replaced tree", async ({
+  context,
+  extensionId,
+}) => {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/${NEWTAB}`);
+
+  // Export an essentially empty state; importing it later replaces everything.
+  await openSettings(page);
+  let dialog = page.getByRole("dialog", { name: "Settings" });
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    dialog.getByRole("button", { name: "Export" }).click(),
+  ]);
+  const dir = await mkdtemp(path.join(tmpdir(), "bmk-residue-"));
+  const emptyStatePath = path.join(dir, download.suggestedFilename());
+  await download.saveAs(emptyStatePath);
+
+  // Now build a tree with stored positions and a custom icon, so the import
+  // has real per-item data to strand. The transfer lock suspends the onRemoved
+  // cleanup, so only the importer's own sweep can collect this.
+  const seeded = await seedFolderWithBookmark(page);
+  await page.reload();
+  await page.evaluate(async (folderId) => {
+    const [bookmark] = await chrome.bookmarks.getChildren(folderId);
+    await chrome.storage.local.set({
+      positions: {
+        [folderId]: { [bookmark!.id]: { page: 0, row: 2, col: 3 } },
+      },
+      bookmarkSettings: {
+        [bookmark!.id]: { labelDisplay: "tooltip", hasCustomIcon: true },
+      },
+      folderSettings: { [folderId]: { hasCustomIcon: true } },
+    });
+  }, seeded);
+
+  const seededIds = await page.evaluate(async (folderId) => {
+    const kids = await chrome.bookmarks.getChildren(folderId);
+    return [folderId, ...kids.map((k) => k.id)];
+  }, seeded);
+
+  // Import the empty state: everything seeded above is deleted.
+  await openSettings(page);
+  dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.getByLabel("Import backup file").setInputFiles(emptyStatePath);
+  const confirm = page.getByRole("alertdialog", { name: "Import Bookmarks" });
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "No", exact: true }).click();
+
+  // No stored entry may remain under any of the replaced tree's ids.
+  await expect
+    .poll(() =>
+      page.evaluate(async (ids) => {
+        const stored = await chrome.storage.local.get([
+          "positions",
+          "bookmarkSettings",
+          "folderSettings",
+        ]);
+        const blob = JSON.stringify(stored);
+        return ids.filter((id) => blob.includes(`"${id}"`));
+      }, seededIds),
+    )
+    .toEqual([]);
+});

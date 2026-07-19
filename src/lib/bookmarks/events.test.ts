@@ -15,6 +15,7 @@ import {
   setFolderHasCustomIcon,
 } from "../storage/folderSettings";
 import { getIcon, putIcon } from "../storage/iconDb";
+import { TRANSFER_LOCK_MAX_AGE_MS } from "../transfer/lockRecord";
 
 const mock = installChromeMock();
 
@@ -319,5 +320,80 @@ describe("bulk import batching", () => {
     const positions = await getFolderPositions("folder-1");
     expect(positions.b1).toEqual({ page: 0, row: 0, col: 0 });
     expect(positions.b2).toEqual({ page: 0, row: 0, col: 1 });
+  });
+});
+
+describe("durable transfer lock", () => {
+  /**
+   * Writes the storage.session lock record directly, without the in-memory
+   * flag — exactly the state a service worker sees after being torn down and
+   * restarted mid-import, since registerBookmarkListeners runs fresh with
+   * transferImportLocked back at its `false` initial value.
+   */
+  async function seedLockRecord(takenAt: number) {
+    await mock.chrome.storage.session.set({
+      transferImportLock: { takenAt },
+    });
+  }
+
+  it("stands down for onCreated when only the stored record is held", async () => {
+    await seedLockRecord(Date.now());
+
+    const bookmark = node("b1", "folder-1");
+    mock.addNode(bookmark);
+    mock.chrome.bookmarks.onCreated.emit("b1", bookmark);
+    await flush();
+
+    // Auto-placement would fight the importer's authoritative position writes.
+    expect(await getFolderPositions("folder-1")).toEqual({});
+  });
+
+  it("stands down for onRemoved when only the stored record is held", async () => {
+    await putIcon("b1", new Blob(["icon"], { type: "image/png" }));
+    await setBookmarkHasCustomIcon("b1", true);
+    await seedLockRecord(Date.now());
+
+    mock.chrome.bookmarks.onRemoved.emit("b1", {
+      parentId: "folder-1",
+      index: 0,
+      node: node("b1", "folder-1"),
+    });
+    await flush();
+
+    // Cleanup here would delete data for ids the importer just created.
+    expect(await getIcon("b1")).toBeDefined();
+    expect(await getBookmarkSettings("b1")).toEqual({
+      labelDisplay: "under-icon",
+      hasCustomIcon: true,
+    });
+  });
+
+  it("ignores a record older than the staleness bound", async () => {
+    // An importer that died without releasing must not suspend synchronization
+    // for the rest of the browser session.
+    await seedLockRecord(Date.now() - (TRANSFER_LOCK_MAX_AGE_MS + 1000));
+
+    const bookmark = node("b1", "folder-1");
+    mock.addNode(bookmark);
+    mock.chrome.bookmarks.onCreated.emit("b1", bookmark);
+    await flush();
+
+    expect(await getFolderPositions("folder-1")).toEqual({
+      b1: { page: 0, row: 0, col: 0 },
+    });
+  });
+
+  it("resumes normal behavior once the record is cleared", async () => {
+    await seedLockRecord(Date.now());
+    await mock.chrome.storage.session.remove("transferImportLock");
+
+    const bookmark = node("b1", "folder-1");
+    mock.addNode(bookmark);
+    mock.chrome.bookmarks.onCreated.emit("b1", bookmark);
+    await flush();
+
+    expect(await getFolderPositions("folder-1")).toEqual({
+      b1: { page: 0, row: 0, col: 0 },
+    });
   });
 });

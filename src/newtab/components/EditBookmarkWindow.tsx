@@ -276,7 +276,7 @@ export function EditBookmarkWindow({
 
           {url.length > 0 && !urlValid && (
             <p className="edit-bookmark-input-error" role="alert">
-              Enter a valid URL (http, https, file, or ftp).
+              Enter a valid URL (http or https).
             </p>
           )}
         </div>

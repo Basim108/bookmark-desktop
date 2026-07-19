@@ -99,6 +99,7 @@ the user cancels, the import SHALL NOT proceed and nothing SHALL be changed.
 - **THEN** nothing is deleted or created and the extension state is unchanged
 
 ### Requirement: Replace-Strategy Restoration
+
 On a confirmed import the system SHALL replace, not merge. For each protected
 root it SHALL restore the file's content by creating the new children **before**
 deleting the previously existing ones, so that a root being restored into never
@@ -112,6 +113,16 @@ existing children SHALL still be removed (replace strategy). Because the replace
 deletes the folder the new-tab view may currently be showing, the system SHALL
 NOT surface a stale bookmark-id error when the replaced tree is read back, and
 the new-tab view SHALL end on the restored tree with a valid selection.
+
+The replace SHALL extend to the stored data that describes the replaced tree, not
+only to the bookmark nodes themselves. Because the import lock deliberately
+suspends the per-item removal cleanup that would normally garbage-collect this
+data, the importer SHALL take responsibility for it: after the per-root
+create-before-delete pass and while the lock is still held, the stored grid
+positions, bookmark settings, and folder settings SHALL be left containing
+exactly the entries the import wrote, and custom-icon records SHALL be left
+containing exactly the icons the import wrote plus the reserved global keys.
+Stored data belonging to the replaced tree SHALL NOT survive the import.
 
 #### Scenario: A non-permanent root's content is restored, not lost to emptying
 - **WHEN** the file has content for the Mobile bookmarks root and that root exists at import time
@@ -133,7 +144,24 @@ the new-tab view SHALL end on the restored tree with a valid selection.
 - **WHEN** the folder the new-tab view is showing is deleted by the replace and the view reads it back
 - **THEN** no "can't find bookmark for id" error is raised, and after the import the view shows the restored tree
 
+#### Scenario: The replaced tree's stored settings do not survive the import
+- **WHEN** an import completes over a tree that had stored grid positions, bookmark settings, and folder settings
+- **THEN** those stores hold exactly the entries the import wrote, and no entry keyed by an id from the replaced tree remains
+
+#### Scenario: The replaced tree's custom icons do not survive the import
+- **WHEN** an import completes over a tree whose items had custom icon records
+- **THEN** the icon store holds exactly the icons the import wrote, and the replaced tree's icon records are gone
+
+#### Scenario: Reserved global icon keys survive the sweep
+- **WHEN** the importer sweeps unreferenced icon records
+- **THEN** the reserved global keys (the default folder icon and the canvas background) are preserved and set from the file's general block, not deleted as unreferenced
+
+#### Scenario: Repeated imports do not accumulate orphaned data
+- **WHEN** several imports are run in succession over each other
+- **THEN** the stored data after the last import is the same as after importing that file into a clean profile, with no growth from the intermediate trees
+
 ### Requirement: Import Lock Suspends Bookmark-Sync Listeners
+
 The system SHALL hold an import lock across the entire delete-and-recreate span,
 enabled before the delete phase begins and disabled only after all creation and
 state restoration finishes. While the lock is held, the extension's normal
@@ -148,6 +176,14 @@ never suspends the listeners. The lock SHALL be released even if the import fail
 partway, and releasing SHALL be idempotent so a partial acquire cannot leave the
 listeners suspended. After the import returns by any path — success, denial, or
 error — the listeners SHALL be operating normally.
+
+The lock SHALL be durable against the background service worker being torn down
+and restarted mid-import: it SHALL be recorded outside the service worker's
+in-memory state, so listeners re-registered on a fresh worker observe a lock that
+is still held. The lock record SHALL carry the time it was taken, and a lock
+older than a bounded maximum import duration SHALL be treated as stale and
+ignored, so an importer that crashed without releasing cannot suspend
+synchronization permanently.
 
 #### Scenario: Auto-placement does not run during import
 - **WHEN** the import creates bookmarks while the lock is held
@@ -169,11 +205,28 @@ error — the listeners SHALL be operating normally.
 - **WHEN** the import is denied at the parse-and-version gate, or the user cancels the backup prompt
 - **THEN** the lock is never acquired and the sync listeners keep operating normally
 
+#### Scenario: The lock survives a service-worker restart
+- **WHEN** the background service worker is torn down and restarted while an import is still running
+- **THEN** the listeners registered by the new worker observe the lock as held and continue to stand down for the rest of the import
+
+#### Scenario: A stale lock does not wedge synchronization
+- **WHEN** a lock record is older than the bounded maximum import duration, because the importer terminated without releasing it
+- **THEN** the listeners treat it as not held and resume normal synchronization
+
 ### Requirement: Restore General Settings and Global Images
+
 The import SHALL restore the general block: the general-settings object, the
 sidebar width, and the two global reserved-key images (canvas background and
 default folder icon). When the file records an image as absent, the
 corresponding global image SHALL be cleared rather than left as-is.
+
+The two global images SHALL be subject to the same content validation the
+per-item icon path applies before they are persisted — the canvas background
+against the background-image rules and the default folder icon against the icon
+rules — so that a corrupted or hand-edited file cannot cause arbitrary bytes of
+arbitrary size to be stored. An image that fails to decode or validate SHALL NOT
+abort the import; the corresponding global image SHALL be cleared instead,
+mirroring the swallow-and-fall-back behavior of the per-item icon path.
 
 #### Scenario: General settings are restored
 - **WHEN** an import completes
@@ -182,6 +235,10 @@ corresponding global image SHALL be cleared rather than left as-is.
 #### Scenario: Global images are restored or cleared
 - **WHEN** an import completes
 - **THEN** the canvas background image and default folder icon match the file, being set when the file includes them and cleared when the file records them as absent
+
+#### Scenario: An invalid global image is rejected rather than stored
+- **WHEN** the file's canvas background or default folder icon fails validation (wrong content type, undecodable, or over the size limit)
+- **THEN** the offending image is not persisted, the corresponding global image is cleared, and the import completes rather than aborting
 
 ### Requirement: Skip-and-Report of Entries That Fail Creation Guards
 For a compatible file, the system SHALL recreate every valid entry and SHALL

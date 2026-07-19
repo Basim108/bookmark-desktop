@@ -4,6 +4,7 @@ import {
   suspendBookmarkSubscribers,
 } from "../bookmarks/events";
 import type { TransferLockMessage } from "../bookmarks/events";
+import { writeTransferLockRecord } from "./lockRecord";
 
 /**
  * Tells the background service worker's bookmark listeners to lock/unlock, and
@@ -29,6 +30,10 @@ async function setBackgroundLock(locked: boolean): Promise<void> {
  * subscribers. Call before any delete/create.
  */
 export async function acquireTransferLock(): Promise<void> {
+  // Written before the message so a service worker that starts up mid-import —
+  // including one woken by the import's own bookmark events — reads a lock that
+  // is already held rather than racing the ack.
+  await writeTransferLockRecord(true);
   await setBackgroundLock(true);
   suspendBookmarkSubscribers();
 }
@@ -43,4 +48,7 @@ export async function releaseTransferLock(): Promise<void> {
   resumeBookmarkSubscribers();
   forceBookmarkResync();
   await setBackgroundLock(false);
+  // Cleared last: while the in-memory flag is being unset, the record is the
+  // only thing a freshly restarted worker could consult.
+  await writeTransferLockRecord(false);
 }

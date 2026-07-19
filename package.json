@@ -1,14 +1,14 @@
 {
-  "name": "web-desktop",
+  "name": "bookmark-desktop",
   "version": "1.0.0",
   "description": "Turn Chrome's new tab into a desktop of your bookmarks — a customizable grid of icons with a folder sidebar.",
-  "homepage": "https://github.com/Basim108/web-desktop#readme",
+  "homepage": "https://github.com/Basim108/bookmark-desktop#readme",
   "bugs": {
-    "url": "https://github.com/Basim108/web-desktop/issues"
+    "url": "https://github.com/Basim108/bookmark-desktop/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Basim108/web-desktop.git"
+    "url": "git+https://github.com/Basim108/bookmark-desktop.git"
   },
   "license": "MIT",
   "author": "Basim Al-Jawahery",
@@ -23,6 +23,7 @@
     "format:write": "prettier --write .",
     "icons:generate": "node scripts/generate-icons.mjs",
     "test": "vitest run",
+    "assets:store": "playwright test --config playwright.store-assets.config.ts",
     "test:watch": "vitest",
     "test:e2e": "npm run build && playwright test",
     "security:retire": "npm run build && retire --path dist",

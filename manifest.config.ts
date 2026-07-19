@@ -6,6 +6,8 @@ export default defineManifest({
   name: "Bookmark Desktop",
   description: pkg.description,
   version: pkg.version,
+  // Links the chrome://extensions entry and the store listing back to the repo.
+  homepage_url: pkg.homepage,
   permissions: ["bookmarks", "storage", "favicon"],
   chrome_url_overrides: {
     newtab: "src/newtab/index.html",

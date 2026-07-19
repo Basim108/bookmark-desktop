@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { installChromeMock } from "../../test/chromeMock";
 import { getBookmarksInFolder, getSubfolders } from "../bookmarks/read";
-import { getBookmarkSettings } from "../storage/bookmarkSettings";
+import {
+  getBookmarkSettings,
+  setBookmarkLabelDisplay,
+} from "../storage/bookmarkSettings";
 import { getCanvasBackground } from "../storage/canvasBackground";
 import { DEFAULT_FOLDER_ICON_KEY } from "../storage/defaultFolderIcon";
+import { setFolderHasCustomIcon } from "../storage/folderSettings";
 import { getIcon, putIcon } from "../storage/iconDb";
 import { getStorageValue } from "../storage/local";
-import { getFolderPositions } from "../storage/positions";
+import { getFolderPositions, setFolderPositions } from "../storage/positions";
 import { STORAGE_KEYS } from "../storage/schema";
 import { getSidebarWidth } from "../storage/sidebarSettings";
 import { EXPORT_FORMAT_VERSION, parseVersion } from "./version";
@@ -600,5 +604,216 @@ describe("importState — hooks", () => {
     await importState("garbage", { confirmImport, performBackup });
     expect(confirmImport).not.toHaveBeenCalled();
     expect(performBackup).not.toHaveBeenCalled();
+  });
+});
+
+describe("importState — the replaced tree's stored data does not survive", () => {
+  /** A file placing one bookmark (with icon + tooltip setting) under the bar. */
+  function fileWithOneBookmark() {
+    return baseFile({
+      roots: {
+        "1": {
+          title: "Bookmarks Bar",
+          children: [
+            {
+              type: "bookmark",
+              title: "Kept",
+              url: "https://kept.example",
+              position: { page: 0, row: 0, col: 0 },
+              settings: { labelDisplay: "tooltip", hasCustomIcon: true },
+              icon: pngDataUrl(),
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  it("prunes positions, settings, and icon blobs belonging to the replaced tree", async () => {
+    seedRoots();
+    // An existing tree with stored data of every kind, as a real profile would
+    // have. These ids are deleted by the import; under the transfer lock the
+    // onRemoved cleanup stands down, so the importer must collect them.
+    const oldId = "old-bm";
+    mock.addNode({
+      id: oldId,
+      parentId: "1",
+      title: "Old",
+      url: "https://old.example",
+      index: 0,
+      syncing: false,
+    });
+    await setFolderPositions("1", { [oldId]: { page: 3, row: 3, col: 3 } });
+    await setBookmarkLabelDisplay(oldId, "tooltip");
+    await setFolderHasCustomIcon("old-folder", true);
+    await putIcon(oldId, new Blob(["old-icon"], { type: "image/png" }));
+
+    await importState(JSON.stringify(fileWithOneBookmark()));
+
+    const kept = (await getBookmarksInFolder("1"))[0]!;
+
+    // Nothing keyed by the replaced tree's ids remains, in any store.
+    const positions = await getStorageValue(STORAGE_KEYS.POSITIONS);
+    expect(JSON.stringify(positions)).not.toContain(oldId);
+    expect(
+      await getStorageValue(STORAGE_KEYS.BOOKMARK_SETTINGS),
+    ).not.toHaveProperty(oldId);
+    expect(
+      await getStorageValue(STORAGE_KEYS.FOLDER_SETTINGS),
+    ).not.toHaveProperty("old-folder");
+    expect(await getIcon(oldId)).toBeUndefined();
+
+    // ...while everything the import wrote is intact.
+    expect(await getFolderPositions("1")).toEqual({
+      [kept.id]: { page: 0, row: 0, col: 0 },
+    });
+    expect(await getBookmarkSettings(kept.id)).toEqual({
+      labelDisplay: "tooltip",
+      hasCustomIcon: true,
+    });
+    expect(await getIcon(kept.id)).toBeDefined();
+  });
+
+  it("does not accumulate across repeated imports", async () => {
+    seedRoots();
+    const text = JSON.stringify(fileWithOneBookmark());
+
+    await importState(text);
+    const afterFirst = {
+      positions: await getStorageValue(STORAGE_KEYS.POSITIONS),
+      bookmarkSettings: await getStorageValue(STORAGE_KEYS.BOOKMARK_SETTINGS),
+      folderSettings: await getStorageValue(STORAGE_KEYS.FOLDER_SETTINGS),
+    };
+
+    await importState(text);
+    await importState(text);
+    const afterThird = {
+      positions: await getStorageValue(STORAGE_KEYS.POSITIONS),
+      bookmarkSettings: await getStorageValue(STORAGE_KEYS.BOOKMARK_SETTINGS),
+      folderSettings: await getStorageValue(STORAGE_KEYS.FOLDER_SETTINGS),
+    };
+
+    // Ids differ between runs, but the shape must not grow.
+    expect(Object.keys(afterThird.positions ?? {})).toHaveLength(
+      Object.keys(afterFirst.positions ?? {}).length,
+    );
+    expect(Object.keys(afterThird.bookmarkSettings ?? {})).toHaveLength(
+      Object.keys(afterFirst.bookmarkSettings ?? {}).length,
+    );
+    expect(Object.keys(afterThird.folderSettings ?? {})).toHaveLength(
+      Object.keys(afterFirst.folderSettings ?? {}).length,
+    );
+  });
+
+  it("preserves the reserved global icon keys through the sweep", async () => {
+    seedRoots();
+    await importState(
+      JSON.stringify(
+        baseFile({
+          roots: {
+            "1": { title: "Bookmarks Bar", children: [] },
+          },
+          general: {
+            sidebarWidth: 240,
+            generalSettings: { background: { kind: "none" } },
+            canvasBackgroundIcon: pngDataUrl(),
+            defaultFolderIcon: pngDataUrl(),
+          },
+        }),
+      ),
+    );
+
+    // The sweep runs with an empty keep-set here (no per-item icons), so this
+    // is the case where a missing reserved-key exemption would wipe both.
+    expect(await getCanvasBackground()).toBeDefined();
+    expect(await getIcon(DEFAULT_FOLDER_ICON_KEY)).toBeDefined();
+  });
+
+  it("does not prune live data when a root is unavailable in this profile", async () => {
+    // Only the bar exists; the file also carries content for Mobile ("3"),
+    // whose getChildren throws — the partial-failure path where a naive sweep
+    // could prune against an incomplete keep-set.
+    mock.addNode(root("1", "Bookmarks Bar", 0));
+    const file = baseFile({
+      roots: {
+        "1": {
+          title: "Bookmarks Bar",
+          children: [
+            {
+              type: "bookmark",
+              title: "Kept",
+              url: "https://kept.example",
+              position: { page: 0, row: 0, col: 0 },
+              settings: { labelDisplay: "tooltip", hasCustomIcon: true },
+              icon: pngDataUrl(),
+            },
+          ],
+        },
+        "3": {
+          title: "Mobile Bookmarks",
+          children: [
+            {
+              type: "bookmark",
+              title: "Lost",
+              url: "https://lost.example",
+              position: null,
+              settings: { labelDisplay: "under-icon", hasCustomIcon: false },
+              icon: null,
+            },
+          ],
+        },
+      },
+    });
+
+    const result = await importState(JSON.stringify(file));
+
+    expect(result.ok).toBe(true);
+    const kept = (await getBookmarksInFolder("1"))[0]!;
+    // The successfully created item keeps all of its restored state.
+    expect(await getFolderPositions("1")).toEqual({
+      [kept.id]: { page: 0, row: 0, col: 0 },
+    });
+    expect(await getBookmarkSettings(kept.id)).toEqual({
+      labelDisplay: "tooltip",
+      hasCustomIcon: true,
+    });
+    expect(await getIcon(kept.id)).toBeDefined();
+  });
+});
+
+describe("importState — global image validation", () => {
+  it("clears rather than stores a global image that fails validation", async () => {
+    seedRoots();
+    // Pre-seed both globals so a failure to clear would be visible.
+    await putIcon(
+      DEFAULT_FOLDER_ICON_KEY,
+      new Blob(["old"], { type: "image/png" }),
+    );
+    await putIcon(
+      "__canvas_background__",
+      new Blob(["old"], { type: "image/png" }),
+    );
+
+    // Valid base64, decodable to a Blob, but not a supported image format —
+    // the case that previously reached put() unchecked.
+    const notAnImage = `data:image/png;base64,${btoa("not-image-bytes")}`;
+    const result = await importState(
+      JSON.stringify(
+        baseFile({
+          roots: { "1": { title: "Bookmarks Bar", children: [] } },
+          general: {
+            sidebarWidth: 240,
+            generalSettings: { background: { kind: "none" } },
+            canvasBackgroundIcon: notAnImage,
+            defaultFolderIcon: notAnImage,
+          },
+        }),
+      ),
+    );
+
+    // Import still succeeds — a bad global image must not abort the restore.
+    expect(result.ok).toBe(true);
+    expect(await getCanvasBackground()).toBeUndefined();
+    expect(await getIcon(DEFAULT_FOLDER_ICON_KEY)).toBeUndefined();
   });
 });

@@ -7,8 +7,16 @@ describe("isSafeNavigationUrl", () => {
     expect(isSafeNavigationUrl("https://example.com/path?q=1")).toBe(true);
   });
 
-  it("allows file URLs", () => {
-    expect(isSafeNavigationUrl("file:///home/user/notes.txt")).toBe(true);
+  // Both were on the allowlist until they were found to be undeliverable:
+  // Chrome dropped FTP in v88, and a file: navigation from the new-tab page is
+  // blocked without an explicit "Allow access to file URLs" grant, so a click
+  // on either silently did nothing.
+  it("blocks file URLs, which cannot navigate from the new-tab page", () => {
+    expect(isSafeNavigationUrl("file:///home/user/notes.txt")).toBe(false);
+  });
+
+  it("blocks ftp URLs, which Chrome no longer supports", () => {
+    expect(isSafeNavigationUrl("ftp://files.example.com/pub")).toBe(false);
   });
 
   it("blocks javascript: URLs", () => {

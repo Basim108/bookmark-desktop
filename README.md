@@ -1,4 +1,4 @@
-# Bookmark Desktop (web-desktop)
+# Bookmark Desktop
 
 A Manifest V3 Chrome extension that replaces the new-tab page with a
 "desktop" of your bookmarks: a grid of icons you can arrange, paginate,
@@ -57,7 +57,7 @@ To build the extension and load it into Chrome yourself, see
 ## Folder structure
 
 ```
-web-desktop/
+bookmark-desktop/
 ├── src/
 │   ├── background/        # MV3 service worker (bookmark event listeners, etc.)
 │   ├── lib/

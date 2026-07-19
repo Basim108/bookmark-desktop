@@ -4,6 +4,7 @@ import {
   DEFAULT_FOLDER_SETTINGS,
   getFolderSettings,
   removeFolderSettings,
+  replaceAllFolderSettings,
   setFolderHasCustomIcon,
 } from "./folderSettings";
 
@@ -37,5 +38,22 @@ describe("removeFolderSettings", () => {
     await setFolderHasCustomIcon("f1", true);
     await removeFolderSettings("f1");
     expect(await getFolderSettings("f1")).toEqual(DEFAULT_FOLDER_SETTINGS);
+  });
+});
+
+describe("replaceAllFolderSettings", () => {
+  it("replaces the stored map rather than merging into it", async () => {
+    await setFolderHasCustomIcon("old", true);
+
+    await replaceAllFolderSettings({ new: { hasCustomIcon: true } });
+
+    expect(await getFolderSettings("new")).toEqual({ hasCustomIcon: true });
+    expect(await getFolderSettings("old")).toEqual(DEFAULT_FOLDER_SETTINGS);
+  });
+
+  it("empties the store when given an empty map", async () => {
+    await setFolderHasCustomIcon("a", true);
+    await replaceAllFolderSettings({});
+    expect(await getFolderSettings("a")).toEqual(DEFAULT_FOLDER_SETTINGS);
   });
 });

@@ -9,6 +9,7 @@ import {
 import { removeBookmarkSettings } from "../storage/bookmarkSettings";
 import { removeFolderSettings } from "../storage/folderSettings";
 import { deleteIcon } from "../storage/iconDb";
+import { isTransferLockRecordHeld } from "../transfer/lockRecord";
 import { isBookmark } from "./read";
 
 const mutex = createMutex();
@@ -54,9 +55,24 @@ const importTouchedFolders = new Set<string>();
 // runtime message, since the importer and these listeners run in different
 // contexts), the position/cleanup listeners stand down: a replace-import writes
 // all positions/settings itself and deletes everything, so auto-placement and
-// per-item cleanup would only fight it. The flag lives in whichever context ran
-// registerBookmarkListeners (the background service worker).
+// per-item cleanup would only fight it.
+//
+// This flag is only a synchronous fast path. It lives in whichever context ran
+// registerBookmarkListeners (the background service worker), so an MV3 teardown
+// mid-import resets it to false while the import is still running — and a long
+// import spends stretches in IndexedDB writes that don't reset the idle timer.
+// The durable record in chrome.storage.session is the authority; see
+// isTransferLocked.
 let transferImportLocked = false;
+
+/**
+ * Whether a state-transfer import is in progress. Checked inside the mutex,
+ * immediately before any position/cleanup write, so a worker that restarted
+ * mid-import still stands down for the rest of it.
+ */
+async function isTransferLocked(): Promise<boolean> {
+  return transferImportLocked || (await isTransferLockRecordHeld());
+}
 
 /** Message the importer sends to toggle the background transfer lock. */
 export interface TransferLockMessage {
@@ -116,16 +132,20 @@ export function registerBookmarkListeners(): void {
       return;
     }
     const parentId = bookmark.parentId;
-    void mutex.runExclusive(() => placeNewBookmark(parentId, id));
+    void mutex.runExclusive(async () => {
+      if (await isTransferLocked()) return;
+      await placeNewBookmark(parentId, id);
+    });
   });
 
   chrome.bookmarks.onRemoved.addListener((_id, removeInfo) => {
     if (transferImportLocked) {
       return;
     }
-    void mutex.runExclusive(() =>
-      cleanUpRemovedSubtree(removeInfo.node, removeInfo.parentId),
-    );
+    void mutex.runExclusive(async () => {
+      if (await isTransferLocked()) return;
+      await cleanUpRemovedSubtree(removeInfo.node, removeInfo.parentId);
+    });
   });
 
   chrome.bookmarks.onMoved.addListener((id, moveInfo) => {
@@ -139,6 +159,7 @@ export function registerBookmarkListeners(): void {
       return;
     }
     void mutex.runExclusive(async () => {
+      if (await isTransferLocked()) return;
       await removeBookmarkPosition(moveInfo.oldParentId, id);
       const [node] = await chrome.bookmarks.get(id);
       if (node && isBookmark(node)) {

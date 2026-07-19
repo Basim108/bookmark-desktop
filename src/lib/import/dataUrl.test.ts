@@ -57,3 +57,41 @@ describe("blobToDataUrl", () => {
     expect(new Uint8Array(await restored!.arrayBuffer())).toEqual(bytes);
   });
 });
+
+describe("blobToDataUrl — chunked encoding", () => {
+  const CHUNK = 0x8000;
+
+  /** Deterministic pseudo-random bytes, so every byte value appears. */
+  function bytesOfLength(length: number): Uint8Array<ArrayBuffer> {
+    const bytes = new Uint8Array(new ArrayBuffer(length));
+    for (let i = 0; i < length; i++) {
+      bytes[i] = (i * 31 + (i >> 8)) & 0xff;
+    }
+    return bytes;
+  }
+
+  // The encoder builds the binary string a chunk at a time; an off-by-one at
+  // the boundary would corrupt or truncate exactly here and nowhere else.
+  it.each([
+    ["just under one chunk", CHUNK - 1],
+    ["exactly one chunk", CHUNK],
+    ["one byte over a chunk", CHUNK + 1],
+    ["several chunks plus a remainder", CHUNK * 3 + 1234],
+  ])("round-trips %s byte-identically", async (_label, length) => {
+    const bytes = bytesOfLength(length);
+    const original = new Blob([bytes], { type: "image/png" });
+
+    const restored = dataUrlToBlob(await blobToDataUrl(original));
+
+    expect(restored?.type).toBe("image/png");
+    expect(new Uint8Array(await restored!.arrayBuffer())).toEqual(bytes);
+  });
+
+  it("encodes an empty blob without producing a malformed data URL", async () => {
+    const restored = dataUrlToBlob(
+      await blobToDataUrl(new Blob([], { type: "image/png" })),
+    );
+    expect(restored).toBeDefined();
+    expect(restored!.size).toBe(0);
+  });
+});

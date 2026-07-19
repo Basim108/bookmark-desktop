@@ -18,6 +18,17 @@ export async function getFolderSettings(
   return all[folderId] ?? DEFAULT_FOLDER_SETTINGS;
 }
 
+/**
+ * Writes the complete folder-settings map, replacing whatever was stored.
+ * See replaceAllPositions for why the state-transfer import needs this rather
+ * than the merging per-item setters.
+ */
+export async function replaceAllFolderSettings(
+  settings: Record<string, FolderSettings>,
+): Promise<void> {
+  await setStorageValue(STORAGE_KEYS.FOLDER_SETTINGS, settings);
+}
+
 /** Discards a folder's stored settings entirely, e.g. when it's removed. */
 export async function removeFolderSettings(folderId: string): Promise<void> {
   const all = await getAllFolderSettings();

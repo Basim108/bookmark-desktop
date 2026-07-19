@@ -28,6 +28,20 @@ export async function setFolderPositions(
   });
 }
 
+/**
+ * Writes the complete positions map, replacing whatever was stored rather than
+ * merging into it (contrast setFolderPositions, which spreads into the existing
+ * map). Exists for the state-transfer import: a replace-import deletes the whole
+ * tree under a lock that suspends the per-item removal cleanup, so the importer
+ * must leave this store holding exactly the entries it wrote — anything merged
+ * over would strand the replaced tree's positions with no way to reclaim them.
+ */
+export async function replaceAllPositions(
+  positions: Record<string, FolderPositions>,
+): Promise<void> {
+  await setStorageValue(STORAGE_KEYS.POSITIONS, positions);
+}
+
 export async function setBookmarkPosition(
   folderId: string,
   bookmarkId: string,

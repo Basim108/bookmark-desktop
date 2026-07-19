@@ -1,12 +1,13 @@
-import { deleteIcon, getIcon, putIcon } from "./iconDb";
+import { CANVAS_BACKGROUND_KEY, deleteIcon, getIcon, putIcon } from "./iconDb";
 
 /**
  * Reserved IndexedDB key for the single canvas background image. Cannot collide
  * with a real Chrome bookmark id (those are numeric strings), so the background
  * image lives in the same icon store as per-item custom icons and the shared
- * default folder icon, reusing the same put/get/delete pipeline.
+ * default folder icon, reusing the same put/get/delete pipeline. Defined in
+ * iconDb so its prune can exempt it from a single source of truth.
  */
-export const CANVAS_BACKGROUND_KEY = "__canvas_background__";
+export { CANVAS_BACKGROUND_KEY };
 
 export function putCanvasBackground(blob: Blob): Promise<void> {
   return putIcon(CANVAS_BACKGROUND_KEY, blob);

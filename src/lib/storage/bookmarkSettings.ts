@@ -47,6 +47,17 @@ export async function setBookmarkHasCustomIcon(
   });
 }
 
+/**
+ * Writes the complete bookmark-settings map, replacing whatever was stored.
+ * See replaceAllPositions for why the state-transfer import needs this rather
+ * than the merging per-item setters.
+ */
+export async function replaceAllBookmarkSettings(
+  settings: Record<string, BookmarkSettings>,
+): Promise<void> {
+  await setStorageValue(STORAGE_KEYS.BOOKMARK_SETTINGS, settings);
+}
+
 /** Discards a bookmark's stored settings entirely, e.g. when it's removed. */
 export async function removeBookmarkSettings(
   bookmarkId: string,

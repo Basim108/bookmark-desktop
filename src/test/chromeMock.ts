@@ -24,6 +24,7 @@ function createEvent<T extends (...args: never[]) => void>() {
  */
 export function installChromeMock() {
   const storage = new Map<string, unknown>();
+  const sessionStorage = new Map<string, unknown>();
   const bookmarkNodes = new Map<string, chrome.bookmarks.BookmarkTreeNode>();
   let generatedIdCounter = 0;
 
@@ -135,6 +136,38 @@ export function installChromeMock() {
         }),
         clear: vi.fn(async () => {
           storage.clear();
+        }),
+      },
+      // Separate backing map from `local`: storage.session is a distinct area
+      // that survives a service-worker restart but not a browser restart, which
+      // is exactly the distinction the transfer lock relies on.
+      session: {
+        get: vi.fn(async (keys?: string | string[] | null) => {
+          if (keys == null) {
+            return Object.fromEntries(sessionStorage.entries());
+          }
+          const keyList = Array.isArray(keys) ? keys : [keys];
+          const result: Record<string, unknown> = {};
+          for (const key of keyList) {
+            if (sessionStorage.has(key)) {
+              result[key] = sessionStorage.get(key);
+            }
+          }
+          return result;
+        }),
+        set: vi.fn(async (items: Record<string, unknown>) => {
+          for (const [key, value] of Object.entries(items)) {
+            sessionStorage.set(key, value);
+          }
+        }),
+        remove: vi.fn(async (keys: string | string[]) => {
+          const keyList = Array.isArray(keys) ? keys : [keys];
+          for (const key of keyList) {
+            sessionStorage.delete(key);
+          }
+        }),
+        clear: vi.fn(async () => {
+          sessionStorage.clear();
         }),
       },
       onChanged: storageOnChanged,
@@ -285,6 +318,7 @@ export function installChromeMock() {
     },
     reset() {
       storage.clear();
+      sessionStorage.clear();
       bookmarkNodes.clear();
       // Deliberately does NOT reset generatedIdCounter: Chrome never reuses a
       // bookmark id, and stored icons (in IndexedDB) can outlive a reset, so
