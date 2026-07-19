@@ -24,6 +24,14 @@ export default tseslint.config(
     },
   },
   {
+    // Node build scripts (e.g. icon generation) run outside the browser.
+    files: ["scripts/**/*.{js,mjs}"],
+    languageOptions: {
+      sourceType: "module",
+      globals: { console: "readonly", process: "readonly" },
+    },
+  },
+  {
     files: ["src/**/*.{ts,tsx}"],
     plugins: {
       "react-hooks": reactHooks,

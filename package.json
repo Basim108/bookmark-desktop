@@ -1,7 +1,7 @@
 {
   "name": "web-desktop",
   "version": "1.0.0",
-  "description": "Organize bookmarks in a browser initial page",
+  "description": "Turn Chrome's new tab into a desktop of your bookmarks — a customizable grid of icons with a folder sidebar.",
   "homepage": "https://github.com/Basim108/web-desktop#readme",
   "bugs": {
     "url": "https://github.com/Basim108/web-desktop/issues"
@@ -21,6 +21,7 @@
     "lint": "eslint .",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
+    "icons:generate": "node scripts/generate-icons.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npm run build && playwright test",
@@ -39,6 +40,7 @@
     "@crxjs/vite-plugin": "^2.7.1",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.61.1",
+    "@resvg/resvg-js": "^2.6.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

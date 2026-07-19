@@ -46,6 +46,7 @@ To build the extension and load it into Chrome yourself, see
 | Document | Purpose |
 |---|---|
 | [`docs/local_use.md`](docs/local_use.md) | How to build and load this extension locally in Chrome |
+| [`docs/store-listing.md`](docs/store-listing.md) | Chrome Web Store listing copy (short + detailed description) — source of truth for the published listing |
 | [`SECURITY.md`](SECURITY.md) | Automated security tooling (CI + weekly scans), manual Chrome Web Store packing/signing steps, and how to protect the `.crx` signing key |
 | [`openspec/project.md`](openspec/project.md) | Project description, tech stack, and the required security/development best practices this repo follows |
 | [`openspec/specs/`](openspec/specs/) | The current, merged specification of every capability the extension implements |
