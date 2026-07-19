@@ -11,3 +11,6 @@ package-lock.json
 .github
 README.md
 LICENSE
+# Google issues this file byte-for-byte and re-checks it; reformatting it
+# would revoke the site's Search Console verification. See site/_config.yml.
+site/google*.html

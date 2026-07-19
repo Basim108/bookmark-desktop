@@ -1,0 +1,19 @@
+{%- comment -%} Overrides the empty head-custom.html that jekyll-theme-minimal
+includes in its document head, which is the theme's supported extension point —
+preferred over copying the theme's default.html into site/_layouts/, since a
+layout copy would stop picking up upstream theme fixes. Do not write a literal
+HTML tag name in this comment. Prettier parses this file as HTML, treats such a
+tag as real, and appends a stray closing tag to the file. The icon itself is not
+committed here. The Pages workflow copies public/icons/icon-32.png into the
+build, so the site's mark and the shipped extension's mark are the same file and
+cannot drift — the same rule the build follows for PRIVACY.md. relative_url is
+required: the site is served under baseurl /bookmark-desktop, and a browser's
+automatic /favicon.ico probe hits the *host* root, which a project page does not
+control. Without an explicit link there is no fallback. {%- endcomment -%}
+
+<link
+  rel="icon"
+  type="image/png"
+  sizes="32x32"
+  href="{{ '/icon-32.png' | relative_url }}"
+/>

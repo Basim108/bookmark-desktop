@@ -1,0 +1,89 @@
+name: Bug report
+description: Something in the extension isn't working the way it should.
+labels: ["bug"]
+
+# Every required field below is one someone who only installed the extension can
+# answer. Console output and stack traces are deliberately optional: most people
+# reporting a new-tab extension bug have never opened devtools, and making that
+# a gate loses the report rather than improving it.
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. The version and browser
+        fields matter more than they look — most bugs turn out to be specific to
+        one Chrome version or one platform, and without them a report often
+        can't be reproduced at all.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the problem in your own words.
+      placeholder: My bookmark icons disappeared after I moved one into a folder.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do, in order, right before the problem appeared?
+      placeholder: |
+        1. Opened a new tab
+        2. Dragged the "GitHub" icon onto the "Work" folder
+        3. The icon vanished and didn't appear inside the folder
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+      placeholder: The icon should have moved into the Work folder.
+    validations:
+      required: true
+
+  - type: input
+    id: extension-version
+    attributes:
+      label: Extension version
+      description: >-
+        Open chrome://extensions, turn on Developer mode, and read the version
+        under "Bookmark Desktop".
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: chrome-version
+    attributes:
+      label: Chrome version
+      description: 'Open chrome://version — it''s the first line, e.g. "Google Chrome 141.0.7390.55".'
+      placeholder: "141.0.7390.55"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - ChromeOS
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else? (optional)
+      description: >-
+        Screenshots help a lot. If you happen to know how, errors from the
+        new-tab page's devtools console are useful too — but don't worry if not.
+    validations:
+      required: false

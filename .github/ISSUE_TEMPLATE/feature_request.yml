@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest something the extension should be able to do.
+labels: ["enhancement"]
+
+# The goal field comes before the proposal field on purpose. The extension has a
+# single stated purpose (a desktop of your bookmarks on the new-tab page), and a
+# request is evaluated against the outcome someone wants rather than the
+# implementation they had in mind — which is often not the best route to it.
+
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to do?
+      description: >-
+        Describe the outcome you want, not the feature. What are you doing today
+        that's awkward, and what would "solved" look like?
+      placeholder: >-
+        I keep about 200 bookmarks and I can never find the one I want without
+        clicking through three folders.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What did you have in mind? (optional)
+      description: If you already have an idea of how it should work, describe it here.
+      placeholder: A search box that filters icons as you type.
+    validations:
+      required: false
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How do you handle it now? (optional)
+      description: >-
+        Knowing the workaround you've settled on says a lot about how much the
+        gap actually costs you.
+    validations:
+      required: false

@@ -1,0 +1,16 @@
+# Blank issues are off so reports arrive with reproduction context rather than
+# as "it doesn't work". The contact links below cover the enquiries that aren't
+# bugs or feature requests, so turning them off doesn't leave anyone stranded.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Privacy policy
+    url: https://basim108.github.io/bookmark-desktop/privacy/
+    about: What the extension does with your data, and where it stays. (It stays on your device.)
+
+  - name: Project home
+    url: https://basim108.github.io/bookmark-desktop/
+    about: What the extension is, and what it can do.
+
+  # TODO: add the Chrome Web Store listing here once the item is published —
+  # the URL needs the item ID, which only exists after the first submission.

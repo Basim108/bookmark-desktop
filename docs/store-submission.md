@@ -15,6 +15,43 @@ assembled from that file at deploy time (`.github/workflows/pages.yml`), so the
 published policy can never drift from the one in the repo. Editing `PRIVACY.md`
 on `main` republishes it.
 
+## Official URL and site verification
+
+```
+https://basim108.github.io/bookmark-desktop/
+```
+
+The dashboard only offers this field for a site verified in Google Search
+Console under the same Google account that owns the developer account.
+Verification is by hosted file: `site/googlee985901f62e6bb4d.html`, served at
+
+```
+https://basim108.github.io/bookmark-desktop/googlee985901f62e6bb4d.html
+```
+
+**That file must never be deleted, renamed, or reformatted.** Google re-checks
+it periodically and silently revokes verification when it stops resolving or
+its contents change. `.prettierignore` excludes it for that reason.
+
+Caveat worth knowing before you start: Google's hosted-file method verifies a
+**URL-prefix property scoped to the path the file sits at**. This verifies
+`https://basim108.github.io/bookmark-desktop/`, not the bare
+`https://basim108.github.io/`. Whether the Official URL field accepts a
+path-scoped property is unconfirmed. If it insists on the bare host, the
+fallback is a `basim108.github.io` user-site repository serving the same file
+at its root. Record which one worked here once you know.
+
+## Support URL
+
+```
+https://github.com/Basim108/bookmark-desktop/issues
+```
+
+Matches `package.json`'s `bugs.url`. The published site's index page links to
+the same tracker, and the repository carries issue templates
+(`.github/ISSUE_TEMPLATE/`) so reports arrive with the version, browser, and
+reproduction context a maintainer cannot reconstruct after the fact.
+
 ## Data-use disclosures
 
 The extension collects nothing and transfers nothing, so every category is

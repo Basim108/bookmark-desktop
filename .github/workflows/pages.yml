@@ -14,6 +14,7 @@ on:
     paths:
       - "PRIVACY.md"
       - "site/**"
+      - "public/icons/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -43,6 +44,11 @@ jobs:
             printf -- '---\ntitle: Privacy Policy\npermalink: /privacy/\n---\n\n'
             cat PRIVACY.md
           } > build/privacy.md
+          # Same rule as the policy above: the favicon is copied from the icon
+          # the extension actually ships rather than kept as a second copy under
+          # site/, so the site's mark and the installed extension's mark cannot
+          # drift. site/_includes/head-custom.html points at this path.
+          cp public/icons/icon-32.png build/icon-32.png
 
       # enablement: true creates the Pages site (build_type: workflow) on the
       # first run instead of requiring someone to flip Settings > Pages >

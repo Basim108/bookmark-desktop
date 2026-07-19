@@ -15,3 +15,14 @@ url: https://basim108.github.io
 
 # Nothing here is a blog.
 show_downloads: false
+
+# googlee985901f62e6bb4d.html is Google's site-ownership proof, required before
+# the Chrome Web Store listing can name this site as its Official URL. It is
+# NOT a stray file:
+#
+#   - Do not delete or rename it. Google re-checks it periodically and silently
+#     revokes verification the moment it 404s.
+#   - Do not reformat it. The token must be served byte-for-byte, which is why
+#     .prettierignore excludes it.
+#   - It has no YAML front matter on purpose, so Jekyll copies it verbatim
+#     instead of rendering it into a page.

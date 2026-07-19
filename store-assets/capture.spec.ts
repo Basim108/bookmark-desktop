@@ -24,6 +24,22 @@ const NEWTAB = "src/newtab/index.html";
 const SCREENSHOT = { width: 1280, height: 800 };
 /** Chrome Web Store small promo tile size. */
 const PROMO_TILE = { width: 440, height: 280 };
+/** Chrome Web Store marquee promo tile size — the featured-placement asset. */
+const MARQUEE = { width: 1400, height: 560 };
+/**
+ * The desktop embedded in the marquee is captured at the exact size it will be
+ * displayed at, so it renders 1:1 — no upscale blur, and no crop cutting a row
+ * of icons in half. Its height matches the tile's; its width overruns the panel
+ * it sits in, which is what produces the bleed off the right edge.
+ */
+const MARQUEE_DESKTOP = { width: 900, height: MARQUEE.height };
+
+/**
+ * Shared by the two designed tiles so they read as one family. The marquee
+ * scales these up rather than restating them.
+ */
+const TILE_BACKGROUND = "linear-gradient(140deg, #1f2937 0%, #111827 100%)";
+const TILE_FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
 
 /**
  * Representative content for the screenshots — a store screenshot showing an
@@ -64,6 +80,14 @@ async function seedDesktop(
         ["Playwright", "https://playwright.dev"],
         ["Docker", "https://www.docker.com"],
         ["Postman", "https://www.postman.com"],
+        ["Stack Overflow", "https://stackoverflow.com"],
+        ["Jira", "https://www.atlassian.com/software/jira"],
+        ["Confluence", "https://www.atlassian.com/software/confluence"],
+        ["PostgreSQL", "https://www.postgresql.org"],
+        ["Redis", "https://redis.io"],
+        ["Sentry", "https://sentry.io"],
+        ["Storybook", "https://storybook.js.org"],
+        ["Vitest", "https://vitest.dev"],
       ],
       Media: [
         ["YouTube", "https://www.youtube.com"],
@@ -113,12 +137,19 @@ async function warmFaviconCache(
   await page.close();
 }
 
-test("captures the 1280x800 store screenshot", async ({
-  context,
-  extensionId,
-}) => {
+/**
+ * Brings up a page showing the seeded desktop with the "Work" folder open,
+ * ready to be screenshotted. Shared by the store screenshot and the marquee
+ * tile, which embeds the same desktop rather than a second, differently-seeded
+ * one — the two assets should show the same product.
+ */
+async function renderSeededDesktop(
+  context: import("@playwright/test").BrowserContext,
+  extensionId: string,
+  size: { width: number; height: number },
+) {
   const page = await context.newPage();
-  await page.setViewportSize(SCREENSHOT);
+  await page.setViewportSize(size);
   await page.goto(`chrome-extension://${extensionId}/${NEWTAB}`);
   const seededUrls = await seedDesktop(page);
   await warmFaviconCache(context, seededUrls);
@@ -132,6 +163,14 @@ test("captures the 1280x800 store screenshot", async ({
   await page.getByRole("button", { name: "Work", exact: true }).click();
   await page.waitForTimeout(1000); // let favicons settle
 
+  return page;
+}
+
+test("captures the 1280x800 store screenshot", async ({
+  context,
+  extensionId,
+}) => {
+  const page = await renderSeededDesktop(context, extensionId, SCREENSHOT);
   await page.screenshot({
     path: path.join(OUT_DIR, "screenshot-1280x800.png"),
   });
@@ -164,9 +203,9 @@ test("captures the 440x280 promo tile", async ({ context, extensionId }) => {
         align-items: center;
         justify-content: center;
         gap: 12px;
-        background: linear-gradient(140deg, #1f2937 0%, #111827 100%);
+        background: ${TILE_BACKGROUND};
         color: #f9fafb;
-        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        font-family: ${TILE_FONT};
         text-align: center;
       }
       img { width: 84px; height: 84px; }
@@ -180,5 +219,100 @@ test("captures the 440x280 promo tile", async ({ context, extensionId }) => {
 
   await page.screenshot({
     path: path.join(OUT_DIR, "promo-tile-440x280.png"),
+  });
+});
+
+test("captures the 1400x560 marquee tile", async ({ context, extensionId }) => {
+  // The marquee is the asset the store's featured placements show, and at 2.5:1
+  // the small tile's centered lockup would leave the frame mostly empty. So
+  // this one is a split: wordmark on the left, the real desktop bleeding off
+  // the right edge. The type treatment and gradient are the small tile's,
+  // scaled, so the two assets read as a pair.
+  const desktop = await renderSeededDesktop(
+    context,
+    extensionId,
+    MARQUEE_DESKTOP,
+  );
+  const desktopDataUrl = `data:image/png;base64,${(
+    await desktop.screenshot()
+  ).toString("base64")}`;
+  await desktop.close();
+
+  const iconPath = path.join(
+    __dirname,
+    "..",
+    "public",
+    "icons",
+    "icon-128.png",
+  );
+  const iconDataUrl = `data:image/png;base64,${(await readFile(iconPath)).toString("base64")}`;
+
+  const page = await context.newPage();
+  await page.setViewportSize(MARQUEE);
+  await page.goto(`chrome-extension://${extensionId}/${NEWTAB}`);
+  await page.setContent(`
+    <style>
+      html, body { margin: 0; padding: 0; }
+      body {
+        width: ${MARQUEE.width}px;
+        height: ${MARQUEE.height}px;
+        display: flex;
+        align-items: center;
+        /* Opaque everywhere: the store rejects assets with an alpha channel,
+           and a gap here is the one way this capture would grow one. */
+        background: ${TILE_BACKGROUND};
+        color: #f9fafb;
+        font-family: ${TILE_FONT};
+        overflow: hidden;
+      }
+      .copy {
+        flex: 0 0 46%;
+        padding: 0 0 0 72px;
+        box-sizing: border-box;
+      }
+      .copy img { width: 104px; height: 104px; display: block; }
+      h1 {
+        margin: 22px 0 0;
+        font-size: 56px;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+        line-height: 1.05;
+      }
+      p {
+        margin: 18px 0 0;
+        font-size: 24px;
+        line-height: 1.4;
+        color: #9ca3af;
+        max-width: 20ch;
+      }
+      /* The desktop runs past the right edge rather than sitting inside a
+         margin — it should read as a window onto the product, not a thumbnail
+         pasted into a banner. */
+      .shot {
+        flex: 1 1 auto;
+        align-self: stretch;
+        position: relative;
+        overflow: hidden;
+      }
+      .shot img {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: ${MARQUEE_DESKTOP.width}px;
+        height: ${MARQUEE_DESKTOP.height}px;
+        border-radius: 14px 0 0 14px;
+        box-shadow: -24px 0 60px rgba(0, 0, 0, 0.55);
+      }
+    </style>
+    <div class="copy">
+      <img src="${iconDataUrl}" alt="" />
+      <h1>Bookmark Desktop</h1>
+      <p>Your new tab, as a desktop of bookmark icons.</p>
+    </div>
+    <div class="shot"><img src="${desktopDataUrl}" alt="" /></div>
+  `);
+
+  await page.screenshot({
+    path: path.join(OUT_DIR, "marquee-1400x560.png"),
   });
 });
