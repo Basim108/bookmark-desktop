@@ -1,10 +1,8 @@
 import { useState } from "react";
-import { CSS } from "@dnd-kit/utilities";
 import { useDraggable } from "@dnd-kit/core";
 import { useBookmarkSettings } from "../hooks/useBookmarkSettings";
 import { isSafeNavigationUrl } from "../../lib/bookmarks/urlSafety";
-import { CustomIconImage } from "./CustomIconImage";
-import { FaviconImage } from "./FaviconImage";
+import { BookmarkIconContent } from "./BookmarkIconContent";
 import { EditBookmarkWindow } from "./EditBookmarkWindow";
 
 interface BookmarkIconProps {
@@ -22,11 +20,10 @@ interface BookmarkIconProps {
  * visibility, removal).
  */
 export function BookmarkIcon({ bookmark, size, folderId }: BookmarkIconProps) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({
-      id: bookmark.id,
-      data: { type: "bookmark", sourceFolderId: folderId },
-    });
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: bookmark.id,
+    data: { type: "bookmark", sourceFolderId: folderId },
+  });
   const { settings, reload, version } = useBookmarkSettings(bookmark.id);
   const [editing, setEditing] = useState(false);
   const tooltipOnly = settings.labelDisplay === "tooltip";
@@ -46,26 +43,17 @@ export function BookmarkIcon({ bookmark, size, folderId }: BookmarkIconProps) {
         ref={setNodeRef}
         type="button"
         className={`bookmark-icon${isDragging ? " bookmark-icon--dragging" : ""}`}
-        style={{ transform: CSS.Translate.toString(transform) }}
         onClick={handleClick}
         title={tooltipOnly ? bookmark.title : undefined}
         {...listeners}
         {...attributes}
       >
-        {settings.hasCustomIcon ? (
-          <CustomIconImage
-            itemId={bookmark.id}
-            alt={bookmark.title}
-            version={version}
-          />
-        ) : bookmark.url ? (
-          <FaviconImage url={bookmark.url} size={size} alt={bookmark.title} />
-        ) : (
-          <span className="favicon-fallback" aria-hidden="true" />
-        )}
-        {!tooltipOnly && (
-          <span className="bookmark-icon-label">{bookmark.title}</span>
-        )}
+        <BookmarkIconContent
+          bookmark={bookmark}
+          size={size}
+          settings={settings}
+          version={version}
+        />
       </button>
 
       <button

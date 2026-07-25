@@ -72,10 +72,12 @@ describe("Canvas", () => {
     await resizeCanvas(320, 160);
 
     await waitFor(() => {
-      expect(screen.getByText("Bookmark b0")).toBeInTheDocument();
+      expect(screen.getByText("Bookmark b0")).toBeVisible();
     });
-    expect(screen.getByText("Bookmark b7")).toBeInTheDocument();
-    expect(screen.queryByText("Bookmark b8")).not.toBeInTheDocument();
+    expect(screen.getByText("Bookmark b7")).toBeVisible();
+    // Every page is mounted so the dragged icon survives a page flip; page 2's
+    // items are in the DOM but hidden until navigated to.
+    expect(screen.getByText("Bookmark b8")).not.toBeVisible();
     expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
   });
 
@@ -95,8 +97,9 @@ describe("Canvas", () => {
     await user.click(screen.getByRole("button", { name: "Next page" }));
 
     expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
-    expect(screen.getByText("Bookmark b8")).toBeInTheDocument();
-    expect(screen.queryByText("Bookmark b0")).not.toBeInTheDocument();
+    expect(screen.getByText("Bookmark b8")).toBeVisible();
+    // Page 1's items remain mounted but hidden after navigating to page 2.
+    expect(screen.getByText("Bookmark b0")).not.toBeVisible();
   });
 
   it("navigates the current tab when a bookmark icon is clicked", async () => {
