@@ -146,6 +146,12 @@ body {
   cursor: grabbing;
 }
 
+/* The dragged clone shown in dnd-kit's DragOverlay (portaled above the grid,
+   so it survives auto-advance page flips). */
+.bookmark-icon--overlay {
+  cursor: grabbing;
+}
+
 .bookmark-icon-settings-toggle {
   position: absolute;
   top: -4px;
