@@ -17,6 +17,37 @@ async function readPosition(
   return stored.positions?.["1"]?.[bookmarkId];
 }
 
+// The background service worker auto-places every newly created bookmark
+// (onCreated -> placeNewBookmark) asynchronously and outside any coordination
+// with this test. If we overwrite positions before those writes land, a late
+// SW placement clobbers our seeded layout back onto page 0 — collapsing the
+// multi-page folder these tests depend on. Under a loaded CI runner the SW
+// loses the race often enough to fail deterministically. So: create the
+// bookmarks, wait until the SW has placed all of them (no writes left
+// pending), and only then apply the explicit positions as the final write.
+async function seedPositions(
+  page: import("@playwright/test").Page,
+  bookmarkIds: string[],
+  positions: Record<string, { page: number; row: number; col: number }>,
+) {
+  await page.evaluate(async (ids) => {
+    const allPlaced = async () => {
+      const stored = (await chrome.storage.local.get("positions")) as {
+        positions?: Record<string, Record<string, unknown>>;
+      };
+      const folder = stored.positions?.["1"] ?? {};
+      return ids.every((id) => id in folder);
+    };
+    while (!(await allPlaced())) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }, bookmarkIds);
+
+  await page.evaluate(async (folderPositions) => {
+    await chrome.storage.local.set({ positions: { "1": folderPositions } });
+  }, positions);
+}
+
 // Injected positions pin an exact page count independent of viewport/capacity:
 // paginate() keys fitting items by their stored page and never compacts them
 // forward, so a marker parked on page 3 keeps the folder three pages deep even
@@ -29,7 +60,7 @@ test("drags a bookmark across multiple pages in one continuous drag", async ({
   await page.setViewportSize({ width: 1000, height: 700 });
   await page.goto(`chrome-extension://${extensionId}/src/newtab/index.html`);
 
-  const draggedId = await page.evaluate(async () => {
+  const { draggedId, markerId } = await page.evaluate(async () => {
     const a = await chrome.bookmarks.create({
       parentId: "1",
       title: "Cross Drag A",
@@ -40,15 +71,11 @@ test("drags a bookmark across multiple pages in one continuous drag", async ({
       title: "Third Page Marker",
       url: "https://example.com/marker",
     });
-    await chrome.storage.local.set({
-      positions: {
-        "1": {
-          [a.id]: { page: 0, row: 0, col: 0 },
-          [marker.id]: { page: 2, row: 0, col: 0 },
-        },
-      },
-    });
-    return a.id;
+    return { draggedId: a.id, markerId: marker.id };
+  });
+  await seedPositions(page, [draggedId, markerId], {
+    [draggedId]: { page: 0, row: 0, col: 0 },
+    [markerId]: { page: 2, row: 0, col: 0 },
   });
   await page.reload();
 
@@ -109,15 +136,11 @@ test("cross-page swap sends the displaced bookmark to the origin page", async ({
       title: "Swap Target",
       url: "https://example.com/swap-b",
     });
-    await chrome.storage.local.set({
-      positions: {
-        "1": {
-          [a.id]: { page: 0, row: 0, col: 0 },
-          [b.id]: { page: 1, row: 0, col: 0 },
-        },
-      },
-    });
     return { draggedId: a.id, occupantId: b.id };
+  });
+  await seedPositions(page, [draggedId, occupantId], {
+    [draggedId]: { page: 0, row: 0, col: 0 },
+    [occupantId]: { page: 1, row: 0, col: 0 },
   });
   await page.reload();
 
