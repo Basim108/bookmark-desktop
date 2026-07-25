@@ -2,21 +2,23 @@
 set -euo pipefail
 
 log() {
-  echo "[postCreateCommands] $*"
+  echo "[ postCreateCommands ] $*"
 }
 
-trap 'echo "[postCreateCommands] failed at line $LINENO" >&2' ERR
+trap 'echo "[ postCreateCommands ] failed at line $LINENO" >&2' ERR
 
 log "Checking prerequisites"
 command -v node >/dev/null 2>&1 || { echo "node is required" >&2; exit 1; }
 command -v npm >/dev/null 2>&1 || { echo "npm is required" >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "python3 is required" >&2; exit 1; }
 
-log "Installing claude-code"
-npm install -g --no-audit --no-fund @anthropic-ai/claude-code@2.1.201
+.devcontainer/install-cc-plugins.sh
 
 log "Installing openspec"
-npm install -g --no-audit --no-fund @fission-ai/openspec@1.5.0
+npm install -g --no-audit --no-fund @fission-ai/openspec@latest
+
+log "Initializing openspec with Claude Code"
+openspec init --tools claude
 
 log "Installing project dependencies"
 npm install --no-fund
@@ -35,7 +37,4 @@ fi
 # pipx can't write there as the non-root user. Use a user-writable location instead.
 export PIPX_HOME="$HOME/.local/pipx"
 export PIPX_BIN_DIR="$HOME/.local/bin"
-pipx ensurepath
-
-log "Installing Semgrep (SEC-11.3 dangerous-function/pattern scan; see SECURITY.md)"
-pipx install --force "semgrep==1.168.0"
+pipx ensurepath --force

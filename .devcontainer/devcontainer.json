@@ -1,6 +1,6 @@
 {
   "name": "Web Desktop Dev Container",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "image": "mcr.microsoft.com/devcontainers/base:resolute",
   "features": {
     "ghcr.io/devcontainers/features/git:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {},
@@ -10,7 +10,8 @@
     "ghcr.io/devcontainers/features/python:1": {
       "version": "3.12",
       "installTools": false
-    }
+    },
+    "ghcr.io/devcontainers-extra/features/claude-code:2": {}
   },
   "customizations": {
     "vscode": {
@@ -27,9 +28,8 @@
       }
     }
   },
-  "forwardPorts": [5173],
-  "mounts": [
-    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind"
+  "forwardPorts": [
+    5173
   ],
-  "postCreateCommand": "postCreateCommands.sh"
+  "postCreateCommand": "bash .devcontainer/postCreateCommands.sh"
 }

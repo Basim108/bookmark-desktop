@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(openspec new *)",
+      "Bash(openspec validate *)",
+      "Bash(openspec show *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(r.get\\('name'\\), '=>', repr\\(\\(r.get\\('text'\\) or ''\\)[:60]\\)\\) for delta in d.get\\('deltas',[]\\) for r in \\(delta.get\\('requirements'\\) or []\\)]\")",
+      "Bash(openspec instructions *)",
+      "Bash(npx vitest *)",
+      "Bash(npx tsc *)",
+      "Bash(npx playwright *)",
+      "Bash(openspec list *)",
+      "Bash(python3 -c \"import json,sys; c=[x for x in json.load\\(sys.stdin\\)['changes'] if x['name']=='export-import-extension-state'][0]; print\\(f\\\\\"tasks: {c['completedTasks']}/{c['totalTasks']} — {c['status']}\\\\\"\\)\")",
+      "Bash(perl -0pi -e 's/\\(        \"1\": \\\\{\\\\n\\)\\(          children: \\\\[\\)/$1          title: \"Bookmarks Bar\",\\\\n$2/g' src/lib/transfer/importState.test.ts)",
+      "Bash(perl -0pi -e 's/\\(        \"2\": \\\\{\\\\n\\)\\(          children: \\\\[\\)/$1          title: \"Other Bookmarks\",\\\\n$2/g' src/lib/transfer/importState.test.ts)",
+      "Bash(git checkout *)",
+      "Skill(opsx:archive)",
+      "Skill(opsx:sync)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git rm *)",
+      "Bash(rm -f \".claude/settings.local.json.tmp.1424.842df02e8d05\")",
+      "Bash(openspec status *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('applyRequires done:', all\\(a['status']=='done' for a in d['artifacts'] if a['id'] in d['applyRequires']\\)\\); print\\('artifacts:', [\\(a['id'],a['status']\\) for a in d['artifacts']]\\); print\\('isComplete:', d['isComplete']\\)\")",
+      "Skill(opsx:apply)",
+      "Bash(npm install *)",
+      "Bash(node -e \"require.resolve\\('@resvg/resvg-js'\\); console.log\\('resvg-js: available'\\)\")",
+      "Bash(cd *)",
+      "Bash(npm run *)",
+      "Bash(python3 -c \"import json; m=json.load\\(open\\('dist/manifest.json'\\)\\); print\\('icons:', m['icons']\\); print\\('description chars:', len\\(m['description']\\)\\); print\\('description:', m['description']\\)\")",
+      "Bash(npm test *)",
+      "Bash(npm audit *)",
+      "Skill(opsx:propose)",
+      "Bash(git check-ignore *)",
+      "Bash(git push *)",
+      "Bash(git mv *)",
+      "Bash(npx prettier *)"
+    ]
+  }
+}
