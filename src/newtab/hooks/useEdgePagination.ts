@@ -23,23 +23,46 @@ const DEFAULT_HOLD_MS = 600;
 /**
  * Drag-to-edge auto-advance pagination (Launchpad/iOS-style): holding a
  * dragged icon near the canvas edge advances to the adjacent page after a
- * short delay. Re-entering the same edge doesn't restart the timer;
- * leaving it (or reaching a page with no further neighbor) cancels it.
+ * short delay, and — while the icon stays at the same edge — keeps advancing
+ * to successive pages one delay apart, so a single drag can cross several
+ * pages (e.g. page 1 -> 2 -> 3). Leaving the edge cancels a pending advance.
+ *
+ * `onAdvance` returns whether a further advance in the same direction is
+ * still possible; the hook re-arms only while it does, so paging halts on
+ * its own at the first/last page.
  */
 export function useEdgePagination(
-  onAdvance: (direction: EdgeDirection) => void,
+  onAdvance: (direction: EdgeDirection) => boolean,
   options: { thresholdPx?: number; holdMs?: number } = {},
 ) {
   const thresholdPx = options.thresholdPx ?? DEFAULT_THRESHOLD_PX;
   const holdMs = options.holdMs ?? DEFAULT_HOLD_MS;
   const activeEdgeRef = useRef<EdgeDirection>(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Always call the latest onAdvance: after an advance triggers a re-render,
+  // the re-armed timer must read the new page state, not the stale closure
+  // captured when the drag first reached the edge.
+  const onAdvanceRef = useRef(onAdvance);
+  onAdvanceRef.current = onAdvance;
 
   function clearTimer() {
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
+  }
+
+  function armTimer(edge: EdgeDirection) {
+    timerRef.current = setTimeout(function fire() {
+      const canAdvanceAgain = onAdvanceRef.current(edge);
+      // Keep paging while the icon is still held at this edge and a further
+      // page remains; otherwise idle until the edge state next changes.
+      if (canAdvanceAgain && activeEdgeRef.current === edge) {
+        timerRef.current = setTimeout(fire, holdMs);
+      } else {
+        timerRef.current = null;
+      }
+    }, holdMs);
   }
 
   function handleDragMove(
@@ -53,9 +76,7 @@ export function useEdgePagination(
     activeEdgeRef.current = edge;
     clearTimer();
     if (edge !== 0) {
-      timerRef.current = setTimeout(() => {
-        onAdvance(edge);
-      }, holdMs);
+      armTimer(edge);
     }
   }
 
