@@ -107,4 +107,18 @@ describe("exportState", () => {
       icon: null,
     });
   });
+
+  it("does not export the last opened folder", async () => {
+    // Session state describing where one machine's user was last working —
+    // carrying it into a file would restore a stale cursor position on
+    // whatever profile the file is imported into.
+    mock.addNode(folder("1", "0", "Bookmarks Bar", 0));
+    mock.addNode(folder("exp-work", "1", "Work", 0));
+    await setStorageValue(STORAGE_KEYS.LAST_FOLDER_ID, "exp-work");
+
+    const result = await exportState();
+
+    expect(JSON.stringify(result)).not.toContain("lastFolderId");
+    expect(result.general).not.toHaveProperty("lastFolderId");
+  });
 });

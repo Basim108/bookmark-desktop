@@ -22,8 +22,8 @@ beforeEach(() => {
 });
 
 /**
- * Owns the shared open-window state the same way Sidebar does, so tests
- * exercise the real single-window-open-at-a-time coordination rather than a
+ * Owns the shared open-window and expanded-folder state the same way Sidebar
+ * does, so tests exercise the real cross-row coordination rather than a
  * stand-in. FolderTreeNode relies (via useSubfolders) on useDndMonitor, which
  * requires a DndContext ancestor — in the real app that's provided by App.
  *
@@ -35,15 +35,37 @@ function Harness({
   activeFolderId,
   onSelectFolder,
   depth = 1,
+  initialExpandedIds = [],
+  onSetExpandedSpy,
 }: {
   folders: chrome.bookmarks.BookmarkTreeNode[];
   activeFolderId: string | undefined;
   onSelectFolder: (folderId: string) => void;
   depth?: number;
+  initialExpandedIds?: string[] | undefined;
+  /** Observes expansion requests; the harness still applies them itself. */
+  onSetExpandedSpy?:
+    ((folderId: string, expanded: boolean) => void) | undefined;
 }) {
   const [openWindow, setOpenWindow] = useState<OpenFolderWindow | undefined>(
     undefined,
   );
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(
+    () => new Set(initialExpandedIds),
+  );
+
+  function setExpanded(folderId: string, expanded: boolean) {
+    onSetExpandedSpy?.(folderId, expanded);
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (expanded) {
+        next.add(folderId);
+      } else {
+        next.delete(folderId);
+      }
+      return next;
+    });
+  }
 
   return (
     <DndTestProvider>
@@ -57,6 +79,8 @@ function Harness({
             depth={depth}
             openWindow={openWindow}
             onSetOpenWindow={setOpenWindow}
+            expandedIds={expandedIds}
+            onSetExpanded={setExpanded}
           />
         ))}
       </ul>
@@ -69,6 +93,9 @@ function renderFolderTreeNode(props: {
   activeFolderId: string | undefined;
   onSelectFolder: (id: string) => void;
   depth: number;
+  initialExpandedIds?: string[] | undefined;
+  onSetExpandedSpy?:
+    ((folderId: string, expanded: boolean) => void) | undefined;
 }) {
   return render(
     <Harness
@@ -76,6 +103,8 @@ function renderFolderTreeNode(props: {
       activeFolderId={props.activeFolderId}
       onSelectFolder={props.onSelectFolder}
       depth={props.depth}
+      initialExpandedIds={props.initialExpandedIds}
+      onSetExpandedSpy={props.onSetExpandedSpy}
     />,
   );
 }
@@ -118,6 +147,89 @@ describe("FolderTreeNode", () => {
     );
 
     expect(await screen.findByText("Personal")).toBeInTheDocument();
+  });
+
+  describe("expansion is driven by props, not local state", () => {
+    it("renders expanded when its id is in expandedIds, with no click", async () => {
+      mock.addNode(folderNode("child-1", "f1", "Personal"));
+      renderFolderTreeNode({
+        folder: folderNode("f1", "1", "Work"),
+        activeFolderId: undefined,
+        onSelectFolder: vi.fn(),
+        depth: 1,
+        initialExpandedIds: ["f1"],
+      });
+
+      expect(await screen.findByText("Personal")).toBeInTheDocument();
+      expect(
+        await screen.findByRole("button", { name: "Collapse folder" }),
+      ).toBeInTheDocument();
+    });
+
+    it("asks to expand when a collapsed row's toggle is clicked", async () => {
+      mock.addNode(folderNode("child-1", "f1", "Personal"));
+      const onSetExpandedSpy = vi.fn();
+      const user = userEvent.setup();
+      renderFolderTreeNode({
+        folder: folderNode("f1", "1", "Work"),
+        activeFolderId: undefined,
+        onSelectFolder: vi.fn(),
+        depth: 1,
+        onSetExpandedSpy,
+      });
+
+      await user.click(
+        await screen.findByRole("button", { name: "Expand folder" }),
+      );
+      expect(onSetExpandedSpy).toHaveBeenCalledWith("f1", true);
+    });
+
+    it("asks to collapse when an expanded row's toggle is clicked", async () => {
+      mock.addNode(folderNode("child-1", "f1", "Personal"));
+      const onSetExpandedSpy = vi.fn();
+      const user = userEvent.setup();
+      renderFolderTreeNode({
+        folder: folderNode("f1", "1", "Work"),
+        activeFolderId: undefined,
+        onSelectFolder: vi.fn(),
+        depth: 1,
+        initialExpandedIds: ["f1"],
+        onSetExpandedSpy,
+      });
+
+      await user.click(
+        await screen.findByRole("button", { name: "Collapse folder" }),
+      );
+      expect(onSetExpandedSpy).toHaveBeenCalledWith("f1", false);
+    });
+
+    it("stays collapsed when the owner ignores the expansion request", async () => {
+      // Proves the node holds no expansion state of its own: with a static
+      // expandedIds and a no-op callback, clicking the toggle changes nothing.
+      mock.addNode(folderNode("child-1", "f1", "Personal"));
+      const user = userEvent.setup();
+      render(
+        <DndTestProvider>
+          <ul>
+            <FolderTreeNode
+              folder={folderNode("f1", "1", "Work")}
+              activeFolderId={undefined}
+              onSelectFolder={vi.fn()}
+              depth={1}
+              openWindow={undefined}
+              onSetOpenWindow={vi.fn()}
+              expandedIds={new Set<string>()}
+              onSetExpanded={vi.fn()}
+            />
+          </ul>
+        </DndTestProvider>,
+      );
+
+      await user.click(
+        await screen.findByRole("button", { name: "Expand folder" }),
+      );
+      expect(screen.queryByText("Personal")).not.toBeInTheDocument();
+    });
   });
 
   it("opens the folder settings window when the gear is clicked", async () => {

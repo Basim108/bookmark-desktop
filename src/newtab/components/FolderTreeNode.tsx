@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useSubfolders } from "../hooks/useSubfolders";
@@ -25,6 +24,10 @@ interface FolderTreeNodeProps {
   openWindow: OpenFolderWindow | undefined;
   /** Opens a folder window (edit this folder or add a subfolder under it) or closes whichever one is open (pass undefined). Lifted to Sidebar so only one window is ever open at a time. */
   onSetOpenWindow: (next: OpenFolderWindow | undefined) => void;
+  /** Ids of every expanded folder across the whole tree. Lifted to Sidebar so a restored folder's ancestors can be expanded from outside the rows themselves. */
+  expandedIds: Set<string>;
+  /** Expands (true) or collapses (false) one folder. Takes an explicit target state rather than toggling, so callers that must *ensure* a row is open — revealing a newly created subfolder — cannot accidentally close an already-open one. */
+  onSetExpanded: (folderId: string, expanded: boolean) => void;
 }
 
 export function FolderTreeNode({
@@ -34,8 +37,10 @@ export function FolderTreeNode({
   depth,
   openWindow,
   onSetOpenWindow,
+  expandedIds,
+  onSetExpanded,
 }: FolderTreeNodeProps) {
-  const [expanded, setExpanded] = useState(false);
+  const expanded = expandedIds.has(folder.id);
   // Chrome's protected top-level folders (Bookmarks Bar, Other Bookmarks,
   // Mobile Bookmarks) are always the sidebar's depth-0 rows. They are not
   // editable (no settings gear) and not draggable, but remain drop targets.
@@ -97,7 +102,7 @@ export function FolderTreeNode({
             type="button"
             className="folder-expand-toggle"
             aria-label={expanded ? "Collapse folder" : "Expand folder"}
-            onClick={() => setExpanded((value) => !value)}
+            onClick={() => onSetExpanded(folder.id, !expanded)}
           >
             {expanded ? "▾" : "▸"}
           </button>
@@ -170,9 +175,11 @@ export function FolderTreeNode({
         {draftOpen && (
           <FolderSettingsWindow
             createParentId={folder.id}
-            // Reveal the newly created first child by expanding this row; the
-            // subfolder list refreshes itself via live bookmark sync.
-            onSaved={() => setExpanded(true)}
+            // Reveal the newly created child by expanding this row; the
+            // subfolder list refreshes itself via live bookmark sync. Expands
+            // unconditionally rather than toggling, so saving under a row that
+            // was already open leaves it open.
+            onSaved={() => onSetExpanded(folder.id, true)}
             onClose={() => onSetOpenWindow(undefined)}
           />
         )}
@@ -189,6 +196,8 @@ export function FolderTreeNode({
               depth={depth + 1}
               openWindow={openWindow}
               onSetOpenWindow={onSetOpenWindow}
+              expandedIds={expandedIds}
+              onSetExpanded={onSetExpanded}
             />
           ))}
         </ul>

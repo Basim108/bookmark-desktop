@@ -60,6 +60,15 @@ export interface StorageSchema {
   sidebarWidth: number;
   /** Global, page-wide settings (e.g. the canvas background). */
   generalSettings: GeneralSettings;
+  /**
+   * The folder the user most recently selected in the sidebar, restored as the
+   * active folder when a new-tab page loads. Session state describing where the
+   * user was last working — not a setting they configured — so it is
+   * deliberately kept out of `generalSettings` and excluded from state
+   * export/import (see lastFolder.ts). Held as its own top-level key so writing
+   * it never read-modify-writes a record another writer shares.
+   */
+  lastFolderId: string;
 }
 
 export const STORAGE_KEYS = {
@@ -68,4 +77,5 @@ export const STORAGE_KEYS = {
   FOLDER_SETTINGS: "folderSettings",
   SIDEBAR_WIDTH: "sidebarWidth",
   GENERAL_SETTINGS: "generalSettings",
+  LAST_FOLDER_ID: "lastFolderId",
 } as const satisfies Record<string, keyof StorageSchema>;
