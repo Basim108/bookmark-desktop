@@ -9,7 +9,7 @@ import { getCanvasBackground } from "../storage/canvasBackground";
 import { DEFAULT_FOLDER_ICON_KEY } from "../storage/defaultFolderIcon";
 import { setFolderHasCustomIcon } from "../storage/folderSettings";
 import { getIcon, putIcon } from "../storage/iconDb";
-import { getStorageValue } from "../storage/local";
+import { getStorageValue, setStorageValue } from "../storage/local";
 import { getFolderPositions, setFolderPositions } from "../storage/positions";
 import { STORAGE_KEYS } from "../storage/schema";
 import { getSidebarWidth } from "../storage/sidebarSettings";
@@ -604,6 +604,24 @@ describe("importState — hooks", () => {
     await importState("garbage", { confirmImport, performBackup });
     expect(confirmImport).not.toHaveBeenCalled();
     expect(performBackup).not.toHaveBeenCalled();
+  });
+});
+
+describe("importState — the last opened folder is left alone", () => {
+  it("leaves the stored lastFolderId exactly as it was", async () => {
+    // The importer carries no session state, so it neither restores one from
+    // the file nor clears the profile's own. It will usually be stale
+    // afterwards (import reassigns every id) — read-time validation in
+    // lastFolder.ts falls back, and the next selection repairs it.
+    seedRoots();
+    await setStorageValue(STORAGE_KEYS.LAST_FOLDER_ID, "pre-import-folder");
+
+    const result = await importState(JSON.stringify(baseFile()));
+
+    expect(result.ok).toBe(true);
+    expect(await getStorageValue(STORAGE_KEYS.LAST_FOLDER_ID)).toBe(
+      "pre-import-folder",
+    );
   });
 });
 

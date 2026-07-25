@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -34,9 +34,34 @@ import { useCanvasBackground } from "./hooks/useCanvasBackground";
 import { moveNodeToFolder } from "../lib/bookmarks/move";
 import { resolveCrossFolderDrop } from "../lib/bookmarks/dragResolve";
 import { forceBookmarkResync } from "../lib/bookmarks/events";
+import { getFolderAncestorChain } from "../lib/bookmarks/read";
+import { getLastFolderId, setLastFolderId } from "../lib/storage/lastFolder";
 
 /** Chrome's bookmark tree root id — parent of the top-level folders (Bookmarks Bar, Other Bookmarks, etc.). */
 const ROOT_FOLDER_ID = "0";
+
+/**
+ * Restoring the last opened folder is asynchronous, so "not yet known" and
+ * "known to be nothing" must be distinguishable: treating both as `undefined`
+ * would paint the first root folder's canvas for a frame and then swap it for
+ * the restored one, on the surface users see most often.
+ */
+type Restoration =
+  | { status: "restoring" }
+  | {
+      status: "restored";
+      /** The folder to open, or undefined to fall back to the first root folder. */
+      folderId: string | undefined;
+      /** The restored folder's ancestors, to expand so its row is visible. */
+      expandedIds: readonly string[];
+    };
+
+const RESTORING: Restoration = { status: "restoring" };
+const RESTORED_NOTHING: Restoration = {
+  status: "restored",
+  folderId: undefined,
+  expandedIds: [],
+};
 
 export function App() {
   const sensors = useSensors(
@@ -84,13 +109,56 @@ export function App() {
 
 function AppContent() {
   const { folders: rootFolders, loading } = useSubfolders(ROOT_FOLDER_ID);
-  // Tracks only an explicit user override; absent an override, the first
-  // root folder is selected. Computed during render rather than synced via
-  // an effect, since it's fully derivable from props/state each render.
+  // Tracks only an explicit user override for this tab; absent an override,
+  // the restored folder (else the first root folder) is selected. Computed
+  // during render rather than synced via an effect, since it's fully derivable
+  // from state each render.
   const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>(
     undefined,
   );
-  const activeFolderId = selectedFolderId ?? rootFolders[0]?.id;
+  const [restoration, setRestoration] = useState<Restoration>(RESTORING);
+  // Read once, on mount. Deliberately *not* subscribed to storage changes:
+  // the last opened folder is applied only when a page loads, so selecting a
+  // folder in one tab never re-navigates any other open tab.
+  useEffect(() => {
+    let cancelled = false;
+    async function restore() {
+      const folderId = await getLastFolderId();
+      if (folderId === undefined) {
+        if (!cancelled) setRestoration(RESTORED_NOTHING);
+        return;
+      }
+      // getFolderAncestorChain starts with the folder itself; drop it so the
+      // restored folder is revealed without its own children being unfolded.
+      const expandedIds = (await getFolderAncestorChain(folderId)).slice(1);
+      if (!cancelled) {
+        setRestoration({ status: "restored", folderId, expandedIds });
+      }
+    }
+    void restore();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const restored = restoration.status === "restored";
+  const activeFolderId =
+    selectedFolderId ??
+    (restoration.status === "restored"
+      ? (restoration.folderId ?? rootFolders[0]?.id)
+      : undefined);
+  // The canvas waits for both the folder tree and the restore; the sidebar
+  // keeps rendering on its own `loading` alone, so it appears no later than
+  // it did before restoration existed.
+  const canvasReady = restored && !loading;
+
+  function handleSelectFolder(folderId: string) {
+    setSelectedFolderId(folderId);
+    // Only an explicit user selection is recorded — never the restore path and
+    // never a fallback, so a tab that fell back because the stored id no longer
+    // resolves cannot overwrite the real recorded folder.
+    void setLastFolderId(folderId);
+  }
   // .app spans the full window width as an ordinary block-level flex
   // container, so measuring it doubles as viewport-width tracking for the
   // sidebar's max-width tiers, reusing the same ResizeObserver pattern
@@ -119,19 +187,25 @@ function AppContent() {
         rootFolders={rootFolders}
         loading={loading}
         activeFolderId={activeFolderId}
-        onSelectFolder={setSelectedFolderId}
+        onSelectFolder={handleSelectFolder}
         viewportWidth={appSize.width}
         onOpenSettings={() => setSettingsOpen(true)}
+        initialExpandedIds={
+          restoration.status === "restored"
+            ? restoration.expandedIds
+            : undefined
+        }
       />
-      {activeFolderId ? (
-        <Canvas
-          folderId={activeFolderId}
-          onLabelFontSizeChange={setLabelFontSize}
-          backgroundStyle={canvasBackground.style}
-        />
-      ) : (
-        <p className="canvas-empty">No bookmark folders found.</p>
-      )}
+      {canvasReady &&
+        (activeFolderId ? (
+          <Canvas
+            folderId={activeFolderId}
+            onLabelFontSizeChange={setLabelFontSize}
+            backgroundStyle={canvasBackground.style}
+          />
+        ) : (
+          <p className="canvas-empty">No bookmark folders found.</p>
+        ))}
       {settingsOpen && (
         <GeneralSettingsWindow
           background={canvasBackground.background}
