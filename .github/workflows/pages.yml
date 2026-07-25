@@ -55,7 +55,7 @@ jobs:
       # Source to "GitHub Actions" by hand first. Without it this step fails
       # with "Get Pages site failed" on a repo where Pages was never enabled,
       # which is a confusing way to learn about a missing settings toggle.
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
         with:
           enablement: true
 
