@@ -38,18 +38,53 @@ export function resolveTier(availableWidth: number): GridTier {
 }
 
 /**
- * Grid capacity is directly derived from the tier icon size: however many
- * whole cells fit in the available space, floored to a minimum of 1 per
- * dimension. Leftover space that doesn't divide evenly is left unused
- * rather than stretching icons to fill it.
+ * Gap between adjacent grid cells, and the grid's own padding on every side,
+ * in px. Declared here — beside the capacity math that has to account for
+ * them — and applied to the grid as inline style rather than in main.css, so
+ * the numbers the arithmetic assumes and the numbers the browser lays out
+ * with cannot drift apart. A CSS-side edit silently invalidating this math is
+ * exactly how the right-edge clipping bug arose.
+ */
+export const GRID_GAP = 8;
+export const GRID_PADDING = 8;
+
+/**
+ * Largest whole number of cells that fits along one axis: `n` cells consume
+ * `n * cellSize + (n - 1) * gap` inside the padded box, which rearranges to
+ * the division below. Floored to a minimum of 1 so a canvas narrower than a
+ * single cell still renders one (clipped) cell rather than an empty grid.
+ */
+function fitCount(
+  available: number,
+  cellSize: number,
+  gap: number,
+  padding: number,
+): number {
+  const usable = Math.max(0, available - 2 * padding);
+  return Math.max(1, Math.floor((usable + gap) / (cellSize + gap)));
+}
+
+/**
+ * Grid capacity is derived from the space cells *actually* consume — the tier
+ * icon size plus the gap between adjacent cells, within the grid's padding —
+ * so every rendered cell is fully visible. Dividing by the icon size alone
+ * over-counts by roughly one cell per screen, which is what clipped the
+ * right-most column.
+ *
+ * Leftover space is never spent growing icons past their tier size. Along the
+ * inline axis the renderer distributes it into the column tracks (icons stay
+ * tier-sized and centred); along the block axis it is left unused below the
+ * last row, keeping the desktop top-anchored.
  */
 export function computeGridCapacity(
   availableWidth: number,
   availableHeight: number,
   iconSize: number,
+  gap: number,
+  padding: number,
 ): GridCapacity {
   return {
-    cols: Math.max(1, Math.floor(availableWidth / iconSize)),
-    rows: Math.max(1, Math.floor(availableHeight / iconSize)),
+    cols: fitCount(availableWidth, iconSize, gap, padding),
+    rows: fitCount(availableHeight, iconSize, gap, padding),
   };
 }

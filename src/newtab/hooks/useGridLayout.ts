@@ -10,7 +10,12 @@ import {
   reflowFolderPositions,
   shouldReflowOnGrowth,
 } from "../../lib/grid/reflow";
-import { computeGridCapacity, resolveTier } from "../../lib/grid/sizing";
+import {
+  GRID_GAP,
+  GRID_PADDING,
+  computeGridCapacity,
+  resolveTier,
+} from "../../lib/grid/sizing";
 import type { GridCapacity } from "../../lib/grid/types";
 import type { LayoutCell } from "../../lib/grid/layout";
 import { onStorageKeysChanged } from "../../lib/storage/onChanged";
@@ -42,13 +47,25 @@ interface PageSelection {
   page: number;
 }
 
-/** Icon size and label font-size are a fixed tier lookup on available width; capacity is directly derived from icon size — no separate stretch-to-fill step. */
+/**
+ * Icon size and label font-size are a fixed tier lookup on the canvas's raw
+ * available width — deliberately not the padding-reduced width, so the
+ * 512/1024 tier breakpoints keep meaning what the spec says they mean.
+ * Capacity is then derived from that icon size plus the gap and padding the
+ * grid actually spends, so no cell is ever rendered outside the canvas.
+ */
 function computeCapacityAndTier(
   width: number,
   height: number,
 ): { capacity: GridCapacity; iconSize: number; labelFontSize: string } {
   const { iconSize, labelFontSize } = resolveTier(width);
-  const capacity = computeGridCapacity(width, height, iconSize);
+  const capacity = computeGridCapacity(
+    width,
+    height,
+    iconSize,
+    GRID_GAP,
+    GRID_PADDING,
+  );
   return { capacity, iconSize, labelFontSize };
 }
 

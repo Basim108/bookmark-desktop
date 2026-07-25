@@ -90,13 +90,14 @@ body {
   overflow: hidden;
 }
 
+/* `gap` and `padding` are applied inline from GRID_GAP/GRID_PADDING in
+   lib/grid/sizing.ts, deliberately NOT declared here: grid capacity is
+   computed from those same constants, and a CSS-side edit that silently
+   disagreed with the arithmetic is what clipped the right-most column. */
 .canvas-grid {
   flex: 1;
   display: grid;
   align-content: start;
-  justify-content: start;
-  gap: 8px;
-  padding: 8px;
   overflow: auto;
   scrollbar-width: none;
 }
@@ -105,14 +106,27 @@ body {
   display: none;
 }
 
+/* The cell spans its whole column track — wider than the icon wherever
+   leftover width was distributed — so it serves as the drop target and the
+   hover hit area. The highlight itself is painted on the inner surface. */
 .grid-cell {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.grid-cell--occupied:hover,
-.grid-cell--over {
+.grid-cell-surface {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Trigger on the cell, paint on the surface: hovering anywhere in the track
+   (including the distributed space beside the icon) lights a tier-sized
+   square, so adjacent cells' highlights never touch and a hovered row reads
+   as discrete icons rather than one continuous bar. */
+.grid-cell--occupied:hover > .grid-cell-surface,
+.grid-cell--over > .grid-cell-surface {
   background: light-dark(rgb(0 0 0 / 8%), rgb(255 255 255 / 12%));
   border-radius: 8px;
 }
