@@ -37,4 +37,4 @@
 
 - [x] 5.1 `npm run typecheck`, `npm run lint`, unit tests, and e2e all green
 - [x] 5.2 Manually reproduce the original report at 1918px window / 240px sidebar and confirm the right-most column is fully visible
-- [ ] 5.3 Note the one-time icon reshuffle for existing users in the PR description
+- [x] 5.3 Note the one-time icon reshuffle for existing users in the PR description
