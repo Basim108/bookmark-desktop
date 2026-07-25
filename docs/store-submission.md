@@ -33,13 +33,13 @@ https://basim108.github.io/bookmark-desktop/googlee985901f62e6bb4d.html
 it periodically and silently revokes verification when it stops resolving or
 its contents change. `.prettierignore` excludes it for that reason.
 
-Caveat worth knowing before you start: Google's hosted-file method verifies a
-**URL-prefix property scoped to the path the file sits at**. This verifies
+Note on granularity, now settled: Google's hosted-file method verifies a
+**URL-prefix property scoped to the path the file sits at** —
 `https://basim108.github.io/bookmark-desktop/`, not the bare
-`https://basim108.github.io/`. Whether the Official URL field accepts a
-path-scoped property is unconfirmed. If it insists on the bare host, the
-fallback is a `basim108.github.io` user-site repository serving the same file
-at its root. Record which one worked here once you know.
+`https://basim108.github.io/`. **The Official URL field accepted this
+path-scoped property directly.** No `basim108.github.io` user-site repository
+was needed, so there is no extra root-served copy of the verification file to
+keep alive — the single copy under `site/` is the whole story.
 
 ## Support URL
 
