@@ -1,5 +1,9 @@
 import { getBookmarksInFolder } from "../bookmarks/read";
-import { getFolderPositions, setFolderPositions } from "../storage/positions";
+import { withPositionsLock } from "../concurrency/positionsLock";
+import {
+  getFolderPositionsUnlocked,
+  setFolderPositionsUnlocked,
+} from "../storage/positions";
 import { DEFAULT_GRID_CAPACITY, getNextFreeCell } from "./placement";
 import type { GridCapacity } from "./types";
 import type { FolderPositions } from "../storage/schema";
@@ -20,26 +24,32 @@ export async function backfillFolderPositions(
   folderId: string,
   capacity: GridCapacity = DEFAULT_GRID_CAPACITY,
 ): Promise<FolderPositions> {
-  const [bookmarks, existing] = await Promise.all([
-    getBookmarksInFolder(folderId),
-    getFolderPositions(folderId),
-  ]);
+  // Read and write inside one lock acquisition. This writes the folder's whole
+  // map, so a snapshot taken before the lock could discard placements the
+  // background worker committed while this was computing — the bug that left
+  // bookmarks stranded with no position.
+  return withPositionsLock(async () => {
+    const [bookmarks, existing] = await Promise.all([
+      getBookmarksInFolder(folderId),
+      getFolderPositionsUnlocked(folderId),
+    ]);
 
-  const unpositioned = bookmarks.filter(
-    (bookmark) => !(bookmark.id in existing),
-  );
-  if (unpositioned.length === 0) {
-    return existing;
-  }
+    const unpositioned = bookmarks.filter(
+      (bookmark) => !(bookmark.id in existing),
+    );
+    if (unpositioned.length === 0) {
+      return existing;
+    }
 
-  const positions: FolderPositions = { ...existing };
-  const occupied = Object.values(positions);
-  for (const bookmark of unpositioned) {
-    const cell = getNextFreeCell(occupied, capacity);
-    positions[bookmark.id] = cell;
-    occupied.push(cell);
-  }
+    const positions: FolderPositions = { ...existing };
+    const occupied = Object.values(positions);
+    for (const bookmark of unpositioned) {
+      const cell = getNextFreeCell(occupied, capacity);
+      positions[bookmark.id] = cell;
+      occupied.push(cell);
+    }
 
-  await setFolderPositions(folderId, positions);
-  return positions;
+    await setFolderPositionsUnlocked(folderId, positions);
+    return positions;
+  });
 }

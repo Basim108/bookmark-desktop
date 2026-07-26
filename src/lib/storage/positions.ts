@@ -1,31 +1,87 @@
+import { withPositionsLock } from "../concurrency/positionsLock";
 import type { GridCell } from "../grid/types";
 import { getStorageValue, setStorageValue } from "./local";
 import { STORAGE_KEYS } from "./schema";
 import type { FolderPositions } from "./schema";
 
-export async function getAllPositions(): Promise<
+/**
+ * Every write in this module is a read-modify-write against one storage key,
+ * from two independent JS realms (background service worker + new-tab pages).
+ * They are therefore serialized by withPositionsLock. Two layers exist so that
+ * composite operations — ones that read, compute, and only then write (see
+ * grid/seed.ts, grid/reflow.ts, bookmarks/events.ts) — can hold the lock across
+ * both halves without deadlocking on a nested acquisition:
+ *
+ *   - `…Unlocked` primitives: no lock, ONLY safe inside a held lock.
+ *   - public operations: acquire the lock exactly once, then use the primitives.
+ *
+ * The rule that keeps this deadlock-free: a locked function never calls another
+ * locked function. Web Locks are not reentrant.
+ */
+
+/** Reads the whole positions map. Caller MUST already hold the positions lock. */
+export async function readAllPositionsUnlocked(): Promise<
   Record<string, FolderPositions>
 > {
   const positions = await getStorageValue(STORAGE_KEYS.POSITIONS);
   return positions ?? {};
 }
 
+/** Writes the whole positions map. Caller MUST already hold the positions lock. */
+export async function writeAllPositionsUnlocked(
+  all: Record<string, FolderPositions>,
+): Promise<void> {
+  await setStorageValue(STORAGE_KEYS.POSITIONS, all);
+}
+
+/**
+ * Merges one folder's positions into the stored map. Caller MUST already hold
+ * the positions lock.
+ */
+export async function setFolderPositionsUnlocked(
+  folderId: string,
+  positions: FolderPositions,
+): Promise<void> {
+  const all = await readAllPositionsUnlocked();
+  await writeAllPositionsUnlocked({ ...all, [folderId]: positions });
+}
+
+/**
+ * Reads one folder's positions. Caller MUST already hold the positions lock —
+ * use this when the value read is about to be written back, so the snapshot
+ * cannot go stale in between.
+ */
+export async function getFolderPositionsUnlocked(
+  folderId: string,
+): Promise<FolderPositions> {
+  const all = await readAllPositionsUnlocked();
+  return all[folderId] ?? {};
+}
+
+/**
+ * Read-only snapshot of the whole map. Unlocked deliberately: readers that
+ * never write back (rendering, export) don't need to contend for the lock.
+ */
+export async function getAllPositions(): Promise<
+  Record<string, FolderPositions>
+> {
+  return readAllPositionsUnlocked();
+}
+
+/** Read-only snapshot of one folder. See getAllPositions on why this is unlocked. */
 export async function getFolderPositions(
   folderId: string,
 ): Promise<FolderPositions> {
-  const all = await getAllPositions();
-  return all[folderId] ?? {};
+  return getFolderPositionsUnlocked(folderId);
 }
 
 export async function setFolderPositions(
   folderId: string,
   positions: FolderPositions,
 ): Promise<void> {
-  const all = await getAllPositions();
-  await setStorageValue(STORAGE_KEYS.POSITIONS, {
-    ...all,
-    [folderId]: positions,
-  });
+  await withPositionsLock(() =>
+    setFolderPositionsUnlocked(folderId, positions),
+  );
 }
 
 /**
@@ -39,7 +95,7 @@ export async function setFolderPositions(
 export async function replaceAllPositions(
   positions: Record<string, FolderPositions>,
 ): Promise<void> {
-  await setStorageValue(STORAGE_KEYS.POSITIONS, positions);
+  await withPositionsLock(() => writeAllPositionsUnlocked(positions));
 }
 
 export async function setBookmarkPosition(
@@ -47,10 +103,12 @@ export async function setBookmarkPosition(
   bookmarkId: string,
   cell: GridCell,
 ): Promise<void> {
-  const folderPositions = await getFolderPositions(folderId);
-  await setFolderPositions(folderId, {
-    ...folderPositions,
-    [bookmarkId]: cell,
+  await withPositionsLock(async () => {
+    const folderPositions = await getFolderPositionsUnlocked(folderId);
+    await setFolderPositionsUnlocked(folderId, {
+      ...folderPositions,
+      [bookmarkId]: cell,
+    });
   });
 }
 
@@ -66,22 +124,26 @@ export async function setBookmarkPositions(
   folderId: string,
   updates: { bookmarkId: string; cell: GridCell }[],
 ): Promise<void> {
-  const folderPositions = await getFolderPositions(folderId);
-  const next = { ...folderPositions };
-  for (const update of updates) {
-    next[update.bookmarkId] = update.cell;
-  }
-  await setFolderPositions(folderId, next);
+  await withPositionsLock(async () => {
+    const folderPositions = await getFolderPositionsUnlocked(folderId);
+    const next = { ...folderPositions };
+    for (const update of updates) {
+      next[update.bookmarkId] = update.cell;
+    }
+    await setFolderPositionsUnlocked(folderId, next);
+  });
 }
 
 export async function removeBookmarkPosition(
   folderId: string,
   bookmarkId: string,
 ): Promise<void> {
-  const folderPositions = await getFolderPositions(folderId);
-  if (!(bookmarkId in folderPositions)) {
-    return;
-  }
-  const { [bookmarkId]: _removed, ...rest } = folderPositions;
-  await setFolderPositions(folderId, rest);
+  await withPositionsLock(async () => {
+    const folderPositions = await getFolderPositionsUnlocked(folderId);
+    if (!(bookmarkId in folderPositions)) {
+      return;
+    }
+    const { [bookmarkId]: _removed, ...rest } = folderPositions;
+    await setFolderPositionsUnlocked(folderId, rest);
+  });
 }
