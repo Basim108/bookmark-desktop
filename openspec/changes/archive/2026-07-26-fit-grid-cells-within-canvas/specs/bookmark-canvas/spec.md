@@ -21,9 +21,13 @@ The row count is derived from the canvas's full height. The pagination controls,
 - **WHEN** the tier is resolved for a given canvas
 - **THEN** the tier breakpoints are compared against the canvas's full available width, not against the width remaining after the grid's padding is subtracted
 
-#### Scenario: Capacity accounts for inter-cell gap and grid padding
+#### Scenario: Capacity derived by floor division
 - **WHEN** the grid's current tier icon size and the canvas's available width and height are known
-- **THEN** the number of columns is the largest whole number `n` for which `n` icon widths plus `n − 1` gaps fit within the available width less the grid's padding on both sides, and the number of rows is derived the same way from the available height
+- **THEN** the number of columns is the available width, less the grid's padding on both sides and plus one gap, divided by the tier icon size plus one gap, rounded down — the largest whole number `n` for which `n` icon widths plus `n − 1` gaps fit — and the number of rows is derived the same way from the available height
+
+#### Scenario: Leftover space is not used to stretch icons
+- **WHEN** the available width or height does not divide evenly by the tier icon size plus a gap
+- **THEN** bookmark icons still render at exactly their tier size; the remainder never grows an icon beyond that value, whether or not it is distributed into the cells around them
 
 #### Scenario: Capacity never drops below one cell per axis
 - **WHEN** the canvas's available width or height is smaller than a single cell plus the grid's padding
@@ -60,9 +64,9 @@ The system SHALL highlight a square of exactly the current tier's icon size, cen
 - **WHEN** a cell has been widened beyond the tier icon size by horizontal leftover distribution and the mouse hovers it
 - **THEN** the added width and the gap to the adjacent cell are not highlighted, and the highlight of two adjacent occupied cells never touches
 
-#### Scenario: Hovering distributed space still highlights the cell
-- **WHEN** the mouse moves over the space added to an occupied cell by horizontal distribution, rather than over the icon itself
-- **THEN** that cell's icon-sized highlight is shown and the cursor is a pointer
+#### Scenario: Hovering an occupied cell highlights the whole cell
+- **WHEN** the mouse moves over any part of a grid cell that contains a bookmark, including the space beside the icon added by horizontal leftover distribution rather than the icon itself
+- **THEN** that cell shows its highlight and the cursor is a pointer — the entire cell area responds to hover, matching the area that accepts a drop, even though the painted highlight is the smaller icon-sized square
 
 #### Scenario: Pointer cursor while hovering an occupied cell
 - **WHEN** the mouse is over a grid cell that contains a bookmark and no drag is in progress

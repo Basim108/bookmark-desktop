@@ -47,7 +47,8 @@
       "Bash(gh run view *)",
       "Bash(npm ls *)",
       "Bash(grep -vE '^\\\\s*$')",
-      "Bash(gh run *)"
+      "Bash(gh run *)",
+      "Bash(openspec archive *)"
     ]
   }
 }
