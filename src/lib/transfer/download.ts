@@ -4,9 +4,26 @@
  * the file is produced and saved entirely in-page, so nothing leaves the device.
  */
 export function downloadJson(data: unknown, filename: string): void {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: "application/json",
-  });
+  downloadBlob(
+    new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+    filename,
+  );
+}
+
+/**
+ * Triggers a local download of already-serialized text (the uTab import
+ * report's CSV). Shares downloadJson's object-URL anchor, so it likewise needs
+ * no `chrome.downloads` permission and nothing leaves the device.
+ */
+export function downloadText(
+  text: string,
+  filename: string,
+  mimeType = "text/plain",
+): void {
+  downloadBlob(new Blob([text], { type: mimeType }), filename);
+}
+
+function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   try {
     const anchor = document.createElement("a");
@@ -37,10 +54,15 @@ export function exportFileName(date: Date = new Date()): string {
 
 /**
  * The import report file name: the chosen import file's name with any extension
- * stripped, suffixed with `-report.json`. A name without a dot is used as-is.
+ * stripped, suffixed with `-report.<extension>`. A name without a dot is used
+ * as-is. `extension` defaults to `json` so the state-transfer call site keeps
+ * its existing `-report.json` output; the uTab importer passes `log`.
  */
-export function reportFileName(importFileName: string): string {
+export function reportFileName(
+  importFileName: string,
+  extension = "json",
+): string {
   const lastDot = importFileName.lastIndexOf(".");
   const base = lastDot > 0 ? importFileName.slice(0, lastDot) : importFileName;
-  return `${base}-report.json`;
+  return `${base}-report.${extension}`;
 }

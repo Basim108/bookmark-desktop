@@ -4,6 +4,7 @@ import { test, expect } from "./fixtures";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UTAB_JSON_PATH = path.join(__dirname, "fixtures", "utab-sample.json");
+const UTAB_SKIPS_PATH = path.join(__dirname, "fixtures", "utab-skips.json");
 const NEWTAB = "src/newtab/index.html";
 
 async function createFolder(
@@ -89,4 +90,82 @@ test("Import uTab recreates folders, bookmarks, and icons inside the selected fo
     .click();
   await expect(page.getByText("Imported Alpha")).toBeVisible();
   await expect(page.getByText("Imported Beta")).toBeVisible();
+});
+
+test("Import uTab downloads a per-entry report file for skipped entries", async ({
+  context,
+  extensionId,
+}) => {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/${NEWTAB}`);
+  await createFolder(page, "ReportTarget");
+  await page.reload();
+  await expandBookmarksBar(page);
+
+  await page
+    .locator(".folder-row", { hasText: "ReportTarget" })
+    .getByRole("button", { name: "Folder settings" })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Folder Settings" });
+  await expect(dialog).toBeVisible();
+
+  const downloadPromise = page.waitForEvent("download");
+  await dialog
+    .getByLabel("Import bookmarks file")
+    .setInputFiles(UTAB_SKIPS_PATH);
+
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("utab-skips-report.log");
+
+  // The summary names the report so the user can find it.
+  await expect(dialog.getByText(/utab-skips-report\.log/)).toBeVisible();
+
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(chunk as Buffer);
+  const csv = Buffer.concat(chunks).toString("utf8");
+  const lines = csv.split("\r\n");
+
+  expect(lines[0]).toBe(
+    "status,id,folder,bookmark-title,bookmark-url,skipping-reason,error",
+  );
+
+  // The blank-name folder is skipped, and its orphan carries an empty `folder`
+  // cell because the blankness is exactly why the parent failed.
+  expect(lines).toContain("skipped,f-blank,,   ,,empty-title,");
+  expect(lines).toContain(
+    "skipped,b-orphan,,Orphaned Bookmark,https://example.com/orphan,parent-skipped,",
+  );
+
+  // A formula-shaped title is prefixed AND quoted, so a spreadsheet renders it
+  // as inert text rather than evaluating it.
+  const formulaLine = lines.find((line) => line.includes("b-formula"))!;
+  expect(formulaLine).toContain("\"'=HYPERLINK(");
+  expect(formulaLine).not.toContain(",=HYPERLINK(");
+
+  // A folder name containing a comma stays one field.
+  expect(formulaLine).toContain('"Reading, Writing"');
+
+  // A scheme-less url is rejected by the safe-scheme allowlist today.
+  expect(lines).toContain(
+    'skipped,b-schemeless,"Reading, Writing",Scheme Less,google.com,unsafe-url,',
+  );
+
+  // An unusable preview is a warning, not a skip — the bookmark still exists.
+  expect(lines).toContain(
+    'warning,b-badicon,"Reading, Writing",Bad Icon,https://example.com/bad-icon,icon-failed,',
+  );
+
+  // The valid entry produced no row at all.
+  expect(csv).not.toContain("b-keep");
+
+  const titles = await page.evaluate(async () => {
+    const [target] = await chrome.bookmarks
+      .getChildren("1")
+      .then((children) => children.filter((n) => n.title === "ReportTarget"));
+    const subfolders = await chrome.bookmarks.getChildren(target!.id);
+    const bookmarks = await chrome.bookmarks.getChildren(subfolders[0]!.id);
+    return bookmarks.map((b) => b.title);
+  });
+  expect(titles).toEqual(["Bad Icon", "Keeper"]);
 });
