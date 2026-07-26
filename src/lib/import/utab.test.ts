@@ -115,6 +115,104 @@ describe("importUtabExport — skip and report", () => {
   });
 });
 
+describe("importUtabExport — empty uTab slots", () => {
+  it("ignores an entry with no url, in every form the absence takes", async () => {
+    const json = JSON.stringify({
+      folders: [
+        {
+          name: "Slots",
+          bookmarks: [
+            { title: "Keep", url: "https://keep.example" },
+            { _id: "s1" },
+            { _id: "s2", title: "", url: "" },
+            { _id: "s3", url: "   " },
+            { _id: "s4", url: 42 },
+          ],
+        },
+      ],
+    });
+
+    const result = await importUtabExport("1", json);
+
+    expect(result.ok && result.summary).toEqual({
+      foldersCreated: 1,
+      bookmarksCreated: 1,
+      skipped: 0,
+    });
+    expect(result.ok && result.rows).toEqual([]);
+
+    const bookmarks = await getBookmarksInFolder(
+      (await getSubfolders("1"))[0]!.id,
+    );
+    expect(bookmarks.map((b) => b.title)).toEqual(["Keep"]);
+  });
+
+  it("reports nothing at all when every unimported entry is a slot", async () => {
+    const json = JSON.stringify({
+      folders: [{ name: "AllSlots", bookmarks: [{}, {}, {}] }],
+    });
+
+    const result = await importUtabExport("1", json);
+
+    expect(result.ok && result.summary).toEqual({
+      foldersCreated: 1,
+      bookmarksCreated: 0,
+      skipped: 0,
+    });
+    expect(result.ok && result.rows).toEqual([]);
+  });
+
+  it("still skips and reports an entry whose url is present but unusable", async () => {
+    const json = JSON.stringify({
+      folders: [
+        {
+          name: "Boundary",
+          bookmarks: [
+            { _id: "s1" },
+            { _id: "b1", title: "", url: "https://blank-title.example" },
+            { _id: "b2", title: "Danger", url: "javascript:alert(1)" },
+            { _id: "b3", title: "Scheme Less", url: "google.com" },
+          ],
+        },
+      ],
+    });
+
+    const result = await importUtabExport("1", json);
+
+    expect(result.ok && result.summary.skipped).toBe(3);
+    expect(result.ok && result.rows.map((r) => [r.id, r.reason])).toEqual([
+      ["b1", "empty-title"],
+      ["b2", "unsafe-url"],
+      ["b3", "unsafe-url"],
+    ]);
+  });
+
+  it("ignores slots orphaned by a blank-named folder, reporting only real entries", async () => {
+    const json = JSON.stringify({
+      folders: [
+        {
+          _id: "f1",
+          name: "   ",
+          bookmarks: [
+            { _id: "s1" },
+            { _id: "s2", url: "" },
+            { _id: "b1", title: "Orphan", url: "https://orphan.example" },
+          ],
+        },
+      ],
+    });
+
+    const result = await importUtabExport("1", json);
+
+    // The folder itself plus its one real bookmark — the two slots are not entries.
+    expect(result.ok && result.summary.skipped).toBe(2);
+    expect(result.ok && result.rows.map((r) => [r.id, r.reason])).toEqual([
+      ["f1", "empty-title"],
+      ["b1", "parent-skipped"],
+    ]);
+  });
+});
+
 describe("importUtabExport — icon fallback", () => {
   it("imports the folder/bookmark but skips the icon when the preview is missing, non-data-url, or invalid", async () => {
     const json = JSON.stringify({

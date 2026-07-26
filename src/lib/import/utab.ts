@@ -108,6 +108,30 @@ function asId(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+/**
+ * Whether an element of a folder's `bookmarks` array is an empty grid slot
+ * rather than a bookmark that failed to import.
+ *
+ * uTab exports each folder's bookmarks as a fixed-size array — one element per
+ * grid position — with placeholder elements for the positions the user never
+ * filled. Most of a real export's elements are therefore not bookmarks at all.
+ * In the measured export (`design/examples/uTab_settings_26-07-2026-report.log`)
+ * 758 of 783 reported "skips" were url-less placeholders, so the summary said
+ * "skipped 783" when 25 bookmarks had actually been lost, and the 25 rows worth
+ * reading were buried under 758 saying an empty slot was empty. A slot is not
+ * an error and there is nothing the user can do about one, so it is not
+ * created, not counted, and not reported.
+ *
+ * The missing url is deliberately sufficient on its own — `title` and `_id` are
+ * not consulted. Against real data all three predicates select the same
+ * elements, and an entry with no url could not be created under any reading of
+ * it. Accepted trade-off: an entry carrying a title but no url is dropped
+ * silently rather than reported.
+ */
+function isEmptySlot(bookmark: UtabBookmark | undefined): boolean {
+  return asString(bookmark?.url).trim().length === 0;
+}
+
 /** Maps a creation guard's rejection onto the shared report vocabulary. */
 function reasonForCreateError(error: BookmarkCreateError): SkipReason {
   return error === "empty-title" ? "empty-title" : "unsafe-url";
@@ -150,15 +174,19 @@ export async function importUtabExport(
       const folderResult = await createFolder(targetFolderId, folderName);
       if (!folderResult.ok) {
         // Can't create the folder → its bookmarks have nowhere to go; count the
-        // folder and every bookmark it would have held as skipped.
-        skipped += 1 + bookmarks.length;
+        // folder and every bookmark it would have held as skipped. Empty slots
+        // are excluded here as they are on the main path — a single blank-named
+        // folder would otherwise contribute a row per unused grid position,
+        // putting the whole noise problem straight back into the report.
+        const orphans = bookmarks.filter((bookmark) => !isEmptySlot(bookmark));
+        skipped += 1 + orphans.length;
         rows.push({
           status: "skipped",
           id: asId(folder?._id),
           title: folderName,
           reason: reasonForCreateError(folderResult.error),
         });
-        for (const bookmark of bookmarks) {
+        for (const bookmark of orphans) {
           // `folder` is deliberately absent: the name was blank, which is
           // precisely why it failed, so there is nothing truthful to print.
           rows.push({
@@ -188,6 +216,7 @@ export async function importUtabExport(
       }
 
       for (const bookmark of bookmarks) {
+        if (isEmptySlot(bookmark)) continue;
         const title = asString(bookmark?.title);
         const url = asString(bookmark?.url);
         const bookmarkResult = await createBookmark(

@@ -117,8 +117,14 @@ test("Import uTab downloads a per-entry report file for skipped entries", async 
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("utab-skips-report.log");
 
-  // The summary names the report so the user can find it.
-  await expect(dialog.getByText(/utab-skips-report\.log/)).toBeVisible();
+  // The summary names the report so the user can find it, and counts only real
+  // entries: the folder, its one orphan, and the two unusable urls. The three
+  // url-less slots in the fixture are not entries and must not inflate this.
+  await expect(
+    dialog.getByText(
+      "Imported 1 folder, 2 bookmarks — skipped 4. Details in utab-skips-report.log.",
+    ),
+  ).toBeVisible();
 
   const stream = await download.createReadStream();
   const chunks: Buffer[] = [];
@@ -146,10 +152,17 @@ test("Import uTab downloads a per-entry report file for skipped entries", async 
   // A folder name containing a comma stays one field.
   expect(formulaLine).toContain('"Reading, Writing"');
 
-  // A scheme-less url is rejected by the safe-scheme allowlist today.
+  // A scheme-less url is rejected by the safe-scheme allowlist today. This is
+  // the boundary marker for empty slots: "no url" is ignored, "bad url" is not.
   expect(lines).toContain(
     'skipped,b-schemeless,"Reading, Writing",Scheme Less,google.com,unsafe-url,',
   );
+
+  // Entries with no url are empty uTab grid slots, not failed imports: they
+  // produce no rows at all, on the main path and under a skipped folder alike.
+  expect(csv).not.toContain("b-slot");
+  expect(csv).not.toContain("b-slot-blank");
+  expect(csv).not.toContain("b-orphan-slot");
 
   // An unusable preview is a warning, not a skip — the bookmark still exists.
   expect(lines).toContain(
