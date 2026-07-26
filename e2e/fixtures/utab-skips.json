@@ -40,6 +40,11 @@
           "url": "https://example.com/keeper"
         },
         {
+          "_id": "b-untitled",
+          "title": "",
+          "url": "https://example.com/untitled/deep/path"
+        },
+        {
           "_id": "b-slot"
         },
         {

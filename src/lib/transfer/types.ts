@@ -68,9 +68,12 @@ export interface ExportGeneral {
  * The union is deliberately a superset that neither importer emits in full —
  * check which apply before switching exhaustively on it:
  *
- * - `empty-title`      — both (state transfer, and uTab for blank folder names)
- * - `unsafe-url`       — both
- * - `parent-skipped`   — both
+ * - `empty-title`      — state transfer only. uTab no longer emits it: a blank
+ *                        folder name is defaulted and a blank bookmark title
+ *                        falls back to its url, so neither is a skip any more.
+ * - `unsafe-url`       — both; the only reason the uTab importer still skips on
+ * - `parent-skipped`   — state transfer only. uTab no longer drops a folder, so
+ *                        it no longer orphans that folder's bookmarks.
  * - `root-unavailable` — state transfer only; uTab imports into a chosen
  *                        folder and never recreates protected roots
  * - `create-failed`    — uTab only; chrome.bookmarks.create rejected

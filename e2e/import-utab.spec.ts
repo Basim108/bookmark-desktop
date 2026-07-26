@@ -118,11 +118,12 @@ test("Import uTab downloads a per-entry report file for skipped entries", async 
   expect(download.suggestedFilename()).toBe("utab-skips-report.log");
 
   // The summary names the report so the user can find it, and counts only real
-  // entries: the folder, its one orphan, and the two unusable urls. The three
-  // url-less slots in the fixture are not entries and must not inflate this.
+  // entries. The three url-less slots are not entries; the blank-named folder
+  // and the untitled bookmark now fall back rather than skipping; so the two
+  // unusable urls are all that is left.
   await expect(
     dialog.getByText(
-      "Imported 1 folder, 2 bookmarks — skipped 4. Details in utab-skips-report.log.",
+      "Imported 2 folders, 4 bookmarks — skipped 2. Details in utab-skips-report.log.",
     ),
   ).toBeVisible();
 
@@ -136,12 +137,14 @@ test("Import uTab downloads a per-entry report file for skipped entries", async 
     "status,id,folder,bookmark-title,bookmark-url,skipping-reason,error",
   );
 
-  // The blank-name folder is skipped, and its orphan carries an empty `folder`
-  // cell because the blankness is exactly why the parent failed.
-  expect(lines).toContain("skipped,f-blank,,   ,,empty-title,");
-  expect(lines).toContain(
-    "skipped,b-orphan,,Orphaned Bookmark,https://example.com/orphan,parent-skipped,",
-  );
+  // A blank folder name is defaulted rather than skipped, so neither it nor the
+  // bookmark it would once have orphaned appears in the report at all.
+  expect(csv).not.toContain("f-blank");
+  expect(csv).not.toContain("b-orphan,");
+  expect(csv).not.toContain("parent-skipped");
+
+  // A blank bookmark title falls back to its url, so it is not a skip either.
+  expect(csv).not.toContain("b-untitled");
 
   // A formula-shaped title is prefixed AND quoted, so a spreadsheet renders it
   // as inert text rather than evaluating it.
@@ -172,13 +175,53 @@ test("Import uTab downloads a per-entry report file for skipped entries", async 
   // The valid entry produced no row at all.
   expect(csv).not.toContain("b-keep");
 
-  const titles = await page.evaluate(async () => {
+  const structure = await page.evaluate(async () => {
     const [target] = await chrome.bookmarks
       .getChildren("1")
       .then((children) => children.filter((n) => n.title === "ReportTarget"));
     const subfolders = await chrome.bookmarks.getChildren(target!.id);
-    const bookmarks = await chrome.bookmarks.getChildren(subfolders[0]!.id);
-    return bookmarks.map((b) => b.title);
+    return {
+      folders: subfolders.map((f) => f.title),
+      bookmarks: await Promise.all(
+        subfolders.map(async (f) =>
+          (await chrome.bookmarks.getChildren(f.id)).map((b) => b.title),
+        ),
+      ),
+    };
   });
-  expect(titles).toEqual(["Bad Icon", "Keeper"]);
+  // The blank-named folder kept its bookmark instead of taking it down with it,
+  // and the untitled entry carries its full url as its title.
+  expect(structure.folders).toEqual(["New Folder", "Reading, Writing"]);
+  expect(structure.bookmarks).toEqual([
+    ["Orphaned Bookmark"],
+    ["Bad Icon", "Keeper", "https://example.com/untitled/deep/path"],
+  ]);
+
+  // The substituted url is shown on hover, never as a label under the icon.
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await page
+    .locator(".folder-row", { hasText: "ReportTarget" })
+    .getByRole("button", { name: "Expand folder" })
+    .click();
+  await page
+    .getByRole("button", { name: "Reading, Writing", exact: true })
+    .click();
+
+  const rescued = page.locator(".bookmark-icon-wrapper", {
+    has: page.getByRole("button", {
+      name: "Edit https://example.com/untitled/deep/path",
+    }),
+  });
+  await expect(rescued).toBeVisible();
+  await expect(rescued.locator(".bookmark-icon-label")).toHaveCount(0);
+  await expect(rescued.locator("button.bookmark-icon")).toHaveAttribute(
+    "title",
+    "https://example.com/untitled/deep/path",
+  );
+  // A titled sibling still shows its label, so the tooltip mode is targeted.
+  const keeper = page.locator(".bookmark-icon-wrapper", {
+    has: page.getByRole("button", { name: "Edit Keeper" }),
+  });
+  await expect(keeper.locator(".bookmark-icon-label")).toHaveText("Keeper");
 });

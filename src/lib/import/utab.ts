@@ -1,7 +1,10 @@
 import { createBookmark, createFolder } from "../bookmarks/create";
 import type { BookmarkCreateError } from "../bookmarks/create";
 import { validateIconFile } from "../icons/validation";
-import { setBookmarkHasCustomIcon } from "../storage/bookmarkSettings";
+import {
+  setBookmarkHasCustomIcon,
+  setBookmarkLabelDisplay,
+} from "../storage/bookmarkSettings";
 import { setFolderHasCustomIcon } from "../storage/folderSettings";
 import { putIcon } from "../storage/iconDb";
 import type { SkipReason } from "../transfer/types";
@@ -34,7 +37,12 @@ interface UtabFolder {
 export interface UtabImportSummary {
   foldersCreated: number;
   bookmarksCreated: number;
-  /** Entries (folders or bookmarks) skipped for a blank name/title or unsafe url. */
+  /**
+   * Entries that looked like real bookmarks but could not be imported — in
+   * practice an unusable url, since a blank folder name is defaulted and a
+   * blank bookmark title falls back to its url. Excludes empty grid slots,
+   * which are not entries at all.
+   */
   skipped: number;
 }
 
@@ -132,7 +140,27 @@ function isEmptySlot(bookmark: UtabBookmark | undefined): boolean {
   return asString(bookmark?.url).trim().length === 0;
 }
 
-/** Maps a creation guard's rejection onto the shared report vocabulary. */
+/**
+ * Name given to an export folder that has none. uTab allows an unnamed folder;
+ * Chrome and this app's own guards do not, and dropping the folder would drop
+ * its entire subtree of otherwise valid bookmarks with it.
+ *
+ * Deliberately the same string the create-folder draft window uses as its
+ * heading, so a folder that arrives unnamed by import reads the same as one the
+ * user would have created by hand.
+ */
+const DEFAULT_FOLDER_NAME = "New Folder";
+
+/**
+ * Maps a creation guard's rejection onto the shared report vocabulary.
+ *
+ * Kept total rather than collapsed to a constant even though `empty-title` is
+ * now unreachable from this importer — a blank folder name is defaulted and a
+ * blank bookmark title falls back to its url, so the only rejection left is an
+ * unusable url. The mapping stays explicit so that adding a third
+ * `BookmarkCreateError` is a type error here rather than a silently wrong
+ * reason in the report.
+ */
 function reasonForCreateError(error: BookmarkCreateError): SkipReason {
   return error === "empty-title" ? "empty-title" : "unsafe-url";
 }
@@ -141,10 +169,13 @@ function reasonForCreateError(error: BookmarkCreateError): SkipReason {
  * Imports a uTab export into `targetFolderId`. Each export folder becomes a
  * Chrome subfolder of the target; its bookmarks become Chrome bookmarks inside
  * that subfolder. Icons come from each entry's base64 `preview`. Structurally
- * invalid input creates nothing; individual entries with a blank name/title or
- * unsafe url are skipped and counted, and a folder that itself can't be created
- * takes its bookmarks with it into the skipped count. Grid placement is left to
- * the background onCreated listener, so this never writes positions itself.
+ * invalid input creates nothing.
+ *
+ * A blank folder name is defaulted and a blank bookmark title falls back to its
+ * url, so neither is a skip; an element with no url at all is an empty grid slot
+ * and is ignored entirely. What remains skipped and counted is an entry whose
+ * url the safe-scheme allowlist rejects. Grid placement is left to the
+ * background onCreated listener, so this never writes positions itself.
  */
 export async function importUtabExport(
   targetFolderId: string,
@@ -169,35 +200,25 @@ export async function importUtabExport(
       const bookmarks = (
         Array.isArray(folder?.bookmarks) ? folder.bookmarks : []
       ) as UtabBookmark[];
-      const folderName = asString(folder?.name);
+      const exportName = asString(folder?.name).trim();
+      const folderName =
+        exportName.length > 0 ? exportName : DEFAULT_FOLDER_NAME;
 
       const folderResult = await createFolder(targetFolderId, folderName);
       if (!folderResult.ok) {
-        // Can't create the folder → its bookmarks have nowhere to go; count the
-        // folder and every bookmark it would have held as skipped. Empty slots
-        // are excluded here as they are on the main path — a single blank-named
-        // folder would otherwise contribute a row per unused grid position,
-        // putting the whole noise problem straight back into the report.
-        const orphans = bookmarks.filter((bookmark) => !isEmptySlot(bookmark));
-        skipped += 1 + orphans.length;
-        rows.push({
-          status: "skipped",
-          id: asId(folder?._id),
-          title: folderName,
-          reason: reasonForCreateError(folderResult.error),
-        });
-        for (const bookmark of orphans) {
-          // `folder` is deliberately absent: the name was blank, which is
-          // precisely why it failed, so there is nothing truthful to print.
-          rows.push({
-            status: "skipped",
-            id: asId(bookmark?._id),
-            title: asString(bookmark?.title),
-            url: asString(bookmark?.url),
-            reason: "parent-skipped",
-          });
-        }
-        continue;
+        // Unreachable by construction: createFolder rejects only a blank title,
+        // and folderName is defaulted above so it never is one. Treated as an
+        // invariant violation rather than a per-entry skip — a blank name is no
+        // longer a user-data problem a report row could help with — so it goes
+        // to the fatal path via the enclosing catch.
+        //
+        // This is what retired the `parent-skipped` rows the uTab importer used
+        // to emit for a dropped folder's bookmarks: no folder is dropped any
+        // more. The reason stays in the shared SkipReason union because state
+        // transfer still emits it.
+        throw new Error(
+          `createFolder rejected a defaulted folder name: ${folderResult.error}`,
+        );
       }
       foldersCreated++;
       const folderIconOk = await attachPreviewIcon(
@@ -216,12 +237,22 @@ export async function importUtabExport(
       }
 
       for (const bookmark of bookmarks) {
+        // Must precede the title fallback: a slot has no url, so substituting
+        // one would leave the title blank anyway — but the check is what keeps
+        // placeholders out of the loop entirely.
         if (isEmptySlot(bookmark)) continue;
         const title = asString(bookmark?.title);
         const url = asString(bookmark?.url);
+        // uTab stores no title for some entries. The url is the only
+        // identifying information such an entry has, so it becomes the title
+        // rather than the entry being dropped. The *full* url, never the
+        // hostname: entries that share a host and differ only by path are
+        // common, and a hostname title would render them indistinguishable —
+        // the exact confusion this fallback exists to prevent.
+        const usesUrlAsTitle = title.trim().length === 0;
         const bookmarkResult = await createBookmark(
           folderResult.node.id,
-          title,
+          usesUrlAsTitle ? url : title,
           url,
         );
         if (!bookmarkResult.ok) {
@@ -230,6 +261,8 @@ export async function importUtabExport(
             status: "skipped",
             id: asId(bookmark?._id),
             folder: folderName,
+            // The source entry's own title, not the substituted one: the row's
+            // job is to point back at the entry in the user's file.
             title,
             url,
             reason: reasonForCreateError(bookmarkResult.error),
@@ -237,6 +270,11 @@ export async function importUtabExport(
           continue;
         }
         bookmarksCreated++;
+        if (usesUrlAsTitle) {
+          // A raw url reads badly under an icon, so show it on hover instead.
+          // Only for substituted titles — a real title keeps the default.
+          await setBookmarkLabelDisplay(bookmarkResult.node.id, "tooltip");
+        }
         const iconOk = await attachPreviewIcon(
           bookmarkResult.node.id,
           bookmark?.preview,

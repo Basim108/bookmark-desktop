@@ -48,7 +48,8 @@
       "Bash(npm ls *)",
       "Bash(grep -vE '^\\\\s*$')",
       "Bash(gh run *)",
-      "Bash(openspec archive *)"
+      "Bash(openspec archive *)",
+      "Skill(commit-commands:commit)"
     ]
   }
 }
