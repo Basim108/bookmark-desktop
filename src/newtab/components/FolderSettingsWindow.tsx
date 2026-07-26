@@ -7,6 +7,9 @@ import { ICON_ERROR_MESSAGES } from "../../lib/icons/errorMessages";
 import { validateIconFile } from "../../lib/icons/validation";
 import { importUtabExport } from "../../lib/import/utab";
 import type { UtabImportSummary } from "../../lib/import/utab";
+import { formatImportReport } from "../../lib/import/report";
+import type { ImportReportRow } from "../../lib/import/report";
+import { downloadText, reportFileName } from "../../lib/transfer/download";
 import { setFolderHasCustomIcon } from "../../lib/storage/folderSettings";
 import { DEFAULT_FOLDER_ICON_KEY } from "../../lib/storage/defaultFolderIcon";
 import { deleteIcon, putIcon } from "../../lib/storage/iconDb";
@@ -17,15 +20,27 @@ function pluralize(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
-/** Human-readable summary of an import, e.g. "Imported 2 folders, 24 bookmarks — skipped 1." */
-function formatImportSummary(summary: UtabImportSummary): string {
+/**
+ * Human-readable summary of an import, e.g.
+ * "Imported 2 folders, 24 bookmarks — skipped 1. Details in utab-report.log."
+ *
+ * The skip count comes from the summary, not from the row count: an import can
+ * record icon warnings with zero skips and still produce a report.
+ */
+function formatImportSummary(
+  summary: UtabImportSummary,
+  rows: readonly ImportReportRow[],
+  reportName?: string,
+): string {
   const base = `Imported ${pluralize(summary.foldersCreated, "folder")}, ${pluralize(
     summary.bookmarksCreated,
     "bookmark",
   )}`;
-  return summary.skipped > 0
-    ? `${base} — skipped ${summary.skipped}.`
-    : `${base}.`;
+  const failed = rows.some((row) => row.status === "fatal");
+  const head = failed ? `${base} before the import failed` : base;
+  const counted =
+    summary.skipped > 0 ? `${head} — skipped ${summary.skipped}.` : `${head}.`;
+  return reportName ? `${counted} Details in ${reportName}.` : counted;
 }
 
 interface FolderSettingsWindowProps {
@@ -175,22 +190,43 @@ export function FolderSettingsWindow({
     setImporting(true);
     setImportResult(undefined);
 
-    const text = await file.text();
-    const result = await importUtabExport(folder.id, text);
-    setImporting(false);
+    // Everything below is wrapped: previously a rejection from file.text() or
+    // from the importer escaped as an unhandled promise, so setImporting(false)
+    // never ran and this dialog stayed on "Importing…" forever.
+    try {
+      const text = await file.text();
+      const result = await importUtabExport(folder.id, text);
 
-    if (!result.ok) {
+      if (!result.ok) {
+        // A structurally rejected file created nothing, so there is nothing
+        // per-entry to report — the inline message says all a report could.
+        setImportResult(
+          result.error === "invalid-json"
+            ? "That file isn’t valid JSON."
+            : "That file isn’t a uTab export.",
+        );
+        return;
+      }
+
+      let reportName: string | undefined;
+      if (result.rows.length > 0) {
+        reportName = reportFileName(file.name, "log");
+        downloadText(formatImportReport(result.rows), reportName, "text/csv");
+      }
       setImportResult(
-        result.error === "invalid-json"
-          ? "That file isn’t valid JSON."
-          : "That file isn’t a uTab export.",
+        formatImportSummary(result.summary, result.rows, reportName),
       );
-      return;
+      // Import creates real bookmarks/folders immediately (not a staged edit),
+      // so refresh the caller without closing the window — the summary stays
+      // visible.
+      onSaved();
+    } catch (error) {
+      setImportResult(
+        `Import failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      setImporting(false);
     }
-    setImportResult(formatImportSummary(result.summary));
-    // Import creates real bookmarks/folders immediately (not a staged edit), so
-    // refresh the caller without closing the window — the summary stays visible.
-    onSaved();
   }
 
   async function handleSave() {

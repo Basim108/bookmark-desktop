@@ -284,6 +284,23 @@ describe("FolderSettingsWindow — new folder (draft) mode", () => {
   });
 });
 
+/**
+ * Records downloads triggered by the object-URL anchor in transfer/download.ts.
+ * jsdom implements neither createObjectURL nor anchor-driven navigation, so
+ * both are stubbed and the anchor's `download` attribute is what we assert on.
+ */
+function captureDownloads() {
+  const names: string[] = [];
+  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:stub");
+  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    names.push(this.download);
+  });
+  return { files: () => names };
+}
+
 function jsonFile(value: unknown, name = "utab.json"): File {
   return new File([JSON.stringify(value)], name, {
     type: "application/json",
@@ -346,5 +363,87 @@ describe("FolderSettingsWindow — import", () => {
 
     await screen.findByText("That file isn’t valid JSON.");
     expect(await getSubfolders("f10")).toEqual([]);
+  });
+});
+
+describe("FolderSettingsWindow — import report", () => {
+  it("downloads a .log report and names it in the summary when entries are skipped", async () => {
+    const user = userEvent.setup();
+    const downloads = captureDownloads();
+    renderWindow({ folder: folderNode("f11", "Target") });
+
+    const file = jsonFile(
+      {
+        folders: [
+          {
+            name: "Work",
+            bookmarks: [
+              { title: "Danger", url: "javascript:alert(1)" },
+              { title: "Keep", url: "https://keep.example" },
+            ],
+          },
+        ],
+      },
+      "my-utab-export.json",
+    );
+
+    await user.upload(screen.getByLabelText("Import bookmarks file"), file);
+
+    await screen.findByText(/my-utab-export-report\.log/);
+    expect(downloads.files()).toEqual(["my-utab-export-report.log"]);
+  });
+
+  it("does not download a report for a clean import", async () => {
+    const user = userEvent.setup();
+    const downloads = captureDownloads();
+    renderWindow({ folder: folderNode("f12", "Target") });
+
+    const file = jsonFile({
+      folders: [
+        {
+          name: "Work",
+          bookmarks: [{ title: "Keep", url: "https://k.example" }],
+        },
+      ],
+    });
+
+    await user.upload(screen.getByLabelText("Import bookmarks file"), file);
+
+    await screen.findByText("Imported 1 folder, 1 bookmark.");
+    expect(downloads.files()).toEqual([]);
+  });
+
+  it("clears the busy state and reports the failure when the importer throws", async () => {
+    const user = userEvent.setup();
+    const downloads = captureDownloads();
+    renderWindow({ folder: folderNode("f13", "Target") });
+    // Reject every create so the import cannot even make its first folder.
+    mock.chrome.bookmarks.create.mockRejectedValue(
+      new Error("QUOTA_BYTES quota exceeded"),
+    );
+
+    const file = jsonFile(
+      {
+        folders: [
+          {
+            name: "Work",
+            bookmarks: [{ title: "A", url: "https://a.example" }],
+          },
+        ],
+      },
+      "boom.json",
+    );
+
+    await user.upload(screen.getByLabelText("Import bookmarks file"), file);
+
+    // The pre-fix behaviour was an unhandled rejection that left this button
+    // disabled forever, with no message ever rendered.
+    await screen.findByText(/boom-report\.log/);
+    expect(downloads.files()).toEqual(["boom-report.log"]);
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Import Bookmarks/ }),
+      ).toBeEnabled();
+    });
   });
 });

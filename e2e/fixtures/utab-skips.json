@@ -1,0 +1,42 @@
+{
+  "folders": [
+    {
+      "_id": "f-blank",
+      "name": "   ",
+      "bookmarks": [
+        {
+          "_id": "b-orphan",
+          "title": "Orphaned Bookmark",
+          "url": "https://example.com/orphan"
+        }
+      ]
+    },
+    {
+      "_id": "f-good",
+      "name": "Reading, Writing",
+      "bookmarks": [
+        {
+          "_id": "b-formula",
+          "title": "=HYPERLINK(\"http://evil.example\",\"click me\")",
+          "url": "javascript:alert(1)"
+        },
+        {
+          "_id": "b-schemeless",
+          "title": "Scheme Less",
+          "url": "google.com"
+        },
+        {
+          "_id": "b-badicon",
+          "title": "Bad Icon",
+          "url": "https://example.com/bad-icon",
+          "preview": "data:image/png;base64,zzzz"
+        },
+        {
+          "_id": "b-keep",
+          "title": "Keeper",
+          "url": "https://example.com/keeper"
+        }
+      ]
+    }
+  ]
+}

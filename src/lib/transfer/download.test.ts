@@ -28,4 +28,14 @@ describe("reportFileName", () => {
   it("handles a name without an extension", () => {
     expect(reportFileName("backup")).toBe("backup-report.json");
   });
+
+  it("uses a caller-supplied extension", () => {
+    expect(reportFileName("utab-export.json", "log")).toBe(
+      "utab-export-report.log",
+    );
+  });
+
+  it("applies a caller-supplied extension to a dotless name", () => {
+    expect(reportFileName("utab-export", "log")).toBe("utab-export-report.log");
+  });
 });

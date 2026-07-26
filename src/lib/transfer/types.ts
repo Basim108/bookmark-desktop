@@ -61,9 +61,31 @@ export interface ExportGeneral {
   defaultFolderIcon: string | null;
 }
 
-/** Why an entry was skipped during import. */
+/**
+ * Why an entry was skipped during import, shared by both importers so a user
+ * never receives two differently-shaped reports from one extension.
+ *
+ * The union is deliberately a superset that neither importer emits in full —
+ * check which apply before switching exhaustively on it:
+ *
+ * - `empty-title`      — both (state transfer, and uTab for blank folder names)
+ * - `unsafe-url`       — both
+ * - `parent-skipped`   — both
+ * - `root-unavailable` — state transfer only; uTab imports into a chosen
+ *                        folder and never recreates protected roots
+ * - `create-failed`    — uTab only; chrome.bookmarks.create rejected
+ * - `icon-failed`      — uTab only, and NOT a skip: it marks a `warning` row
+ *                        for an item that imported fine with a default icon
+ *
+ * Because the two importers share this type they must be changed together.
+ */
 export type SkipReason =
-  "empty-title" | "unsafe-url" | "parent-skipped" | "root-unavailable";
+  | "empty-title"
+  | "unsafe-url"
+  | "parent-skipped"
+  | "root-unavailable"
+  | "create-failed"
+  | "icon-failed";
 
 /** One row of the downloadable import report. */
 export interface SkippedEntryRecord {
