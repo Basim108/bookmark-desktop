@@ -7,6 +7,7 @@ import type {
   DragStartEvent,
 } from "@dnd-kit/core";
 import { resolveDrop } from "../../lib/grid/dragDrop";
+import { GRID_GAP, GRID_PADDING } from "../../lib/grid/sizing";
 import { useGridLayout } from "../hooks/useGridLayout";
 import { useEdgePagination } from "../hooks/useEdgePagination";
 import { BookmarkIcon } from "./BookmarkIcon";
@@ -178,8 +179,24 @@ export function Canvas({
                   className="canvas-grid"
                   style={{
                     display: isCurrent ? "grid" : "none",
-                    gridTemplateColumns: `repeat(${capacity.cols}, ${iconSize}px)`,
+                    // Column tracks absorb whatever width doesn't divide evenly
+                    // into whole cells, so the leftover reads as even margins
+                    // between icons while every pixel stays inside a droppable
+                    // cell — widening the *gaps* instead would carve dead
+                    // strips down the canvas that swallow drops.
+                    //
+                    // minmax(0, …), not a bare 1fr: 1fr means minmax(auto, 1fr),
+                    // whose auto floor refuses to shrink below the fixed-size
+                    // icon within. The canvas is measured by ResizeObserver, so
+                    // a sidebar drag renders one frame with the previous column
+                    // count at the new width; a floorless track compresses for
+                    // that frame instead of overflowing and clipping.
+                    gridTemplateColumns: `repeat(${capacity.cols}, minmax(0, 1fr))`,
+                    // Rows stay fixed-size: vertical leftover is intentionally
+                    // left below the last row so the desktop stays top-anchored.
                     gridTemplateRows: `repeat(${capacity.rows}, ${iconSize}px)`,
+                    gap: GRID_GAP,
+                    padding: GRID_PADDING,
                   }}
                 >
                   {Array.from({ length: capacity.rows }, (_, row) =>

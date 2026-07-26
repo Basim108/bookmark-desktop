@@ -60,16 +60,16 @@ function folderNode(
 
 describe("Canvas", () => {
   it("renders bookmarks from the folder, paginating once capacity is exceeded", async () => {
-    // 10 bookmarks; below the 512px tier breakpoint -> 80px icons ->
-    // floor(320/80)=4 cols, floor(160/80)=2 rows -> capacity 8 per page ->
-    // 2 pages (8 + 2).
+    // 10 bookmarks; below the 512px tier breakpoint -> 80px icons. Capacity
+    // counts the 8px gaps and 8px padding: (400-16+8)/(80+8)=4 cols,
+    // (200-16+8)/(80+8)=2 rows -> capacity 8 per page -> 2 pages (8 + 2).
     mock.addNode(folderNode("f1", "0"));
     for (let i = 0; i < 10; i++) {
       mock.addNode(bookmarkNode(`b${i}`, "f1", i));
     }
 
     renderCanvas("f1");
-    await resizeCanvas(320, 160);
+    await resizeCanvas(400, 200);
 
     await waitFor(() => {
       expect(screen.getByText("Bookmark b0")).toBeVisible();
@@ -89,7 +89,7 @@ describe("Canvas", () => {
     const user = userEvent.setup();
 
     renderCanvas("f1");
-    await resizeCanvas(320, 160);
+    await resizeCanvas(400, 200);
     await waitFor(() => {
       expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
     });
@@ -131,15 +131,15 @@ describe("Canvas", () => {
     mock.addNode(bookmarkNode("b0", "f1", 0));
 
     renderCanvas("f1");
-    await resizeCanvas(320, 160);
-    // 320x160 below the 512px tier breakpoint -> 80px icons ->
-    // floor(320/80)=4 cols, floor(160/80)=2 rows -> 8 cells total.
+    await resizeCanvas(400, 200);
+    // 400x200 below the 512px tier breakpoint -> 80px icons -> 4 cols x 2 rows
+    // once the gaps and padding are counted -> 8 cells total.
     await waitFor(() => {
       expect(document.querySelectorAll(".grid-cell")).toHaveLength(8);
     });
   });
 
-  it("sizes cells at the 106px tier between 512px and 1024px", async () => {
+  it("sizes icons at the 106px tier between 512px and 1024px", async () => {
     mock.addNode(folderNode("f1", "0"));
     mock.addNode(bookmarkNode("b0", "f1", 0));
 
@@ -147,14 +147,14 @@ describe("Canvas", () => {
     await resizeCanvas(700, 106);
 
     await waitFor(() => {
-      const cells = document.querySelectorAll(".grid-cell");
-      // floor(700/106)=6 cols, floor(106/106)=1 row -> 6 cells.
-      expect(cells).toHaveLength(6);
-      expect((cells[0] as HTMLElement).style.width).toBe("106px");
+      // (700-16+8)/(106+8)=6 cols, height fits under one cell -> 1 row.
+      expect(document.querySelectorAll(".grid-cell")).toHaveLength(6);
+      const surfaces = document.querySelectorAll(".grid-cell-surface");
+      expect((surfaces[0] as HTMLElement).style.width).toBe("106px");
     });
   });
 
-  it("sizes cells at the 166px tier at 1024px and wider", async () => {
+  it("sizes icons at the 166px tier at 1024px and wider", async () => {
     mock.addNode(folderNode("f1", "0"));
     mock.addNode(bookmarkNode("b0", "f1", 0));
 
@@ -162,10 +162,50 @@ describe("Canvas", () => {
     await resizeCanvas(1024, 166);
 
     await waitFor(() => {
-      const cells = document.querySelectorAll(".grid-cell");
-      // floor(1024/166)=6 cols, floor(166/166)=1 row -> 6 cells.
-      expect(cells).toHaveLength(6);
-      expect((cells[0] as HTMLElement).style.width).toBe("166px");
+      // (1024-16+8)/(166+8)=5 cols. The old gap-blind floor(1024/166)=6 asked
+      // for a 6th column that needed 1044px to render, clipping it.
+      expect(document.querySelectorAll(".grid-cell")).toHaveLength(5);
+      const surfaces = document.querySelectorAll(".grid-cell-surface");
+      expect((surfaces[0] as HTMLElement).style.width).toBe("166px");
+    });
+  });
+
+  it("lets the column track drive cell width while the icon keeps its tier size", async () => {
+    mock.addNode(folderNode("f1", "0"));
+    mock.addNode(bookmarkNode("b0", "f1", 0));
+
+    renderCanvas("f1");
+    await resizeCanvas(1024, 166);
+
+    await waitFor(() => {
+      const grid = document.querySelector(".canvas-grid") as HTMLElement;
+      // Space-absorbing tracks, floorless so a stale frame mid-sidebar-drag
+      // compresses instead of overflowing.
+      expect(grid.style.gridTemplateColumns).toBe("repeat(5, minmax(0, 1fr))");
+      // Rows stay fixed — vertical leftover is left below the last row.
+      expect(grid.style.gridTemplateRows).toBe("repeat(1, 166px)");
+      // The cell takes its width from the track, not from an inline style.
+      const cell = document.querySelector(".grid-cell") as HTMLElement;
+      expect(cell.style.width).toBe("");
+      expect(cell.style.height).toBe("166px");
+    });
+  });
+
+  it("gives every cell a tier-sized highlight surface, including empty ones", async () => {
+    mock.addNode(folderNode("f1", "0"));
+    mock.addNode(bookmarkNode("b0", "f1", 0));
+
+    renderCanvas("f1");
+    await resizeCanvas(1024, 166);
+
+    await waitFor(() => {
+      const surfaces = document.querySelectorAll(".grid-cell-surface");
+      // One per cell — empty cells need one too, since a drag over an empty
+      // cell highlights it as a drop target.
+      expect(surfaces).toHaveLength(5);
+      for (const surface of surfaces) {
+        expect((surface as HTMLElement).style.width).toBe("166px");
+      }
     });
   });
 
