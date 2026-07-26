@@ -1,4 +1,8 @@
-import { getFolderPositions, setFolderPositions } from "../storage/positions";
+import { withPositionsLock } from "../concurrency/positionsLock";
+import {
+  getFolderPositionsUnlocked,
+  setFolderPositionsUnlocked,
+} from "../storage/positions";
 import { compareCells, indexToCell } from "./placement";
 import type { GridCapacity } from "./types";
 import type { FolderPositions } from "../storage/schema";
@@ -47,13 +51,20 @@ export function shouldReflowOnGrowth(
   return colsGrew && !rowsShrunk;
 }
 
-/** Reads, repacks, and persists a folder's positions for a new (grown) capacity. */
+/**
+ * Reads, repacks, and persists a folder's positions for a new (grown) capacity.
+ * Held under one lock acquisition: the repack is derived from the snapshot it
+ * reads and replaces the folder's whole map, so releasing in between would let
+ * it discard placements committed by the background worker while repacking.
+ */
 export async function reflowFolderPositions(
   folderId: string,
   capacity: GridCapacity,
 ): Promise<FolderPositions> {
-  const positions = await getFolderPositions(folderId);
-  const repacked = repackPositions(positions, capacity);
-  await setFolderPositions(folderId, repacked);
-  return repacked;
+  return withPositionsLock(async () => {
+    const positions = await getFolderPositionsUnlocked(folderId);
+    const repacked = repackPositions(positions, capacity);
+    await setFolderPositionsUnlocked(folderId, repacked);
+    return repacked;
+  });
 }

@@ -1,10 +1,11 @@
 import { createMutex } from "../concurrency/mutex";
 import { DEFAULT_GRID_CAPACITY, getNextFreeCell } from "../grid/placement";
 import { backfillFolderPositions } from "../grid/seed";
+import { withPositionsLock } from "../concurrency/positionsLock";
 import {
-  getFolderPositions,
+  getFolderPositionsUnlocked,
   removeBookmarkPosition,
-  setBookmarkPosition,
+  setFolderPositionsUnlocked,
 } from "../storage/positions";
 import { removeBookmarkSettings } from "../storage/bookmarkSettings";
 import { removeFolderSettings } from "../storage/folderSettings";
@@ -14,10 +15,25 @@ import { isBookmark } from "./read";
 
 const mutex = createMutex();
 
+/**
+ * Choosing the cell and storing it happen inside one lock acquisition. Reading
+ * the occupied cells, picking the next free one, and writing it are three steps
+ * that must see the same snapshot: releasing in between would let a new-tab
+ * page's whole-map write drop this placement, and would also let a concurrent
+ * placement pick the same "next free" cell.
+ */
 async function placeNewBookmark(folderId: string, bookmarkId: string) {
-  const existing = await getFolderPositions(folderId);
-  const cell = getNextFreeCell(Object.values(existing), DEFAULT_GRID_CAPACITY);
-  await setBookmarkPosition(folderId, bookmarkId, cell);
+  await withPositionsLock(async () => {
+    const existing = await getFolderPositionsUnlocked(folderId);
+    const cell = getNextFreeCell(
+      Object.values(existing),
+      DEFAULT_GRID_CAPACITY,
+    );
+    await setFolderPositionsUnlocked(folderId, {
+      ...existing,
+      [bookmarkId]: cell,
+    });
+  });
 }
 
 /**
