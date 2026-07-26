@@ -18,11 +18,18 @@ Four threads were raised, and two have been split into their own changes:
 - **Thread 2 (grid capacity)** → `openspec/changes/place-bookmarks-at-real-grid-capacity/`
   — a placement bug affecting every bookmark-creation path, not an import bug.
 - **Thread 4 (import report)** → `openspec/changes/add-utab-import-report/`
-  — PROPOSED, all artifacts complete, ready to implement.
+  — **IMPLEMENTED and archived** as
+  `openspec/changes/archive/2026-07-26-add-utab-import-report/`.
 
 **This document is now the exploration home for Threads 1 and 3 only.** The
 Thread 4 section below is retained for the reasoning that produced the
 proposal; the proposal itself supersedes it.
+
+A fifth change was created **after** the report shipped and was read:
+
+- **`openspec/changes/ignore-utab-empty-slots/`** — 758 of the 783 skips turned
+  out not to be bookmarks at all. See "The measurement" below; it reshapes
+  Thread 1 substantially.
 
 ## Decisions made (2026-07-26)
 
@@ -51,9 +58,80 @@ proposal; the proposal itself supersedes it.
 8. **No report file on whole-file rejection** (`invalid-json` / `not-utab`).
    Nothing was attempted; the existing inline message suffices.
 
+### After the report shipped and was measured (still 2026-07-26)
+
+9. **Empty uTab slots are ignored entirely** — split into
+   `openspec/changes/ignore-utab-empty-slots/`. An entry with no url is a
+   placeholder, not a failed import: not created, not counted, not reported.
+   758 of the 783 skips were these.
+10. **The `unsafe-url` work is dropped** — scheme-less repair, `chrome://` /
+    `file:` relaxation, and the proposed `unsafe-url` reason split. The
+    measurement found zero `unsafe-url` skips, so there is no measured benefit
+    to weigh against relaxing a security allowlist. See Thread 1, questions 4
+    and 5.
+11. **A blank folder name becomes `"New Folder"`** rather than skipping the
+    folder and its whole subtree. See Thread 1, question 3.
+12. **Both fallbacks live in the importer**, not in `createBookmark` /
+    `createFolder`. Those guards also serve the manual add/edit forms and stay
+    as they are. See Thread 1, question 2.
+
 ---
 
 ## Thread 1 — Blank titles are skipped; "unsafe URL" is over-broad
+
+> **SPLIT OUT → `openspec/changes/import-blank-named-utab-entries/`** —
+> PROPOSED, all artifacts complete. Every open question below is resolved or
+> dropped. This section is retained for the reasoning that produced the
+> proposal; the proposal supersedes it. Questions 6 and 7 (added after the
+> measurement) are **not** covered by it and remain unclaimed.
+
+### The measurement — SETTLED (2026-07-26)
+
+The report shipped and was run against the user's real export
+(`design/examples/uTab_settings_26-07-2026-report.log`, 789 rows). This is the
+empirical answer the whole thread was waiting on, and it **overturns the
+thread's premise**.
+
+```
+789 rows
+├─ 783  status=skipped   reason=empty-title    ← 100% of skips
+└─   6  status=warning   reason=icon-failed
+        reason=unsafe-url: NONE    status=fatal: none    error column: never populated
+```
+
+**Zero `unsafe-url` skips.** Everything below about `isSafeNavigationUrl` being
+over-broad — scheme-less hosts, `chrome://`, `file:` — has no support in this
+data. The proposed split of `unsafe-url` into "unparseable" vs "disallowed
+scheme", named earlier in this document as a prerequisite for measuring the
+problem, is not needed: the report answered by returning the empty set.
+
+**The 783 split cleanly in two**, and the larger half is not a loss at all:
+
+| | rows | shape | verdict |
+| --- | ---: | --- | --- |
+| empty uTab grid slots | 758 | no `url`, no `title`, no `_id` | never were bookmarks |
+| genuine losses | 25 | has `url`, blank `title` | **exactly what this thread rescues** |
+
+The 758 are placeholder elements in uTab's fixed-size per-folder `bookmarks`
+arrays. 12 folders × 83 slots = 996 = 213 created + 783 skipped, exactly, with
+every folder's implied created count non-negative and plausible. Split out into
+**`openspec/changes/ignore-utab-empty-slots/`**, which carries the full
+arithmetic.
+
+**So Thread 1's real scope is 25 bookmarks, not 783** — a factor of 31 smaller
+than the number that motivated it. Still worth doing: they are useful, live
+entries (`github.com/Basim108`, two Jira/Confluence deep links, LinkedIn,
+Instagram, Logtail, Clockify), all well-formed `https://`.
+
+**The fallback is safe against the 758.** They have no url either, so
+`title := url` yields nothing and they would stay skipped — there is no risk of
+this change resurrecting 758 junk bookmarks. `ignore-utab-empty-slots` removes
+them for a different reason (they are noise in the report and in the count),
+and the two changes do not conflict.
+
+**Sequencing:** land `ignore-utab-empty-slots` first. With the noise gone the
+report shrinks to almost exactly the entries this thread rescues, so Thread 1's
+effect becomes a direct before/after read rather than a subtraction.
 
 ### Current behaviour
 
@@ -78,8 +156,14 @@ Deny-by-default. It conflates four distinct categories:
 | Browser-internal    | `chrome://extensions`, `about:`| Not on the allowlist                                              | Debatable; uTab users plausibly had these |
 | **Not a URL at all**| `google.com`, `www.foo.com/x`  | `new URL("google.com")` **throws** → caught → `false`             | **Probably a bug for import**             |
 
-The last row is the sharpest: a scheme-less host is silently dropped and
-counted only in an opaque integer.
+The last row looked like the sharpest: a scheme-less host is silently dropped
+and counted only in an opaque integer.
+
+**Superseded by the measurement above.** The user's export produced *zero*
+`unsafe-url` skips of any kind, so none of these four categories actually
+occurred. The analysis stands as a description of the rule; it is no longer a
+description of a problem anyone has. Keep it for the day a different export
+does hit it.
 
 ### Wanted change
 
@@ -87,47 +171,159 @@ A bookmark with a blank/whitespace-only title should **not** be skipped.
 Instead: `title := url`, and its `labelDisplay` set to `"tooltip"` (icon-only,
 title on hover).
 
+A **folder** with a blank/whitespace-only name should not be skipped either.
+Instead: `name := "New Folder"`, keeping its bookmarks with it. See open
+question 3 — this is settled.
+
+Both are the same shape of fix, and open question 2 is now settled for both:
+**the substitution happens in the importer**, before `createBookmark` /
+`createFolder` are called. Their guards are left untouched.
+
+```
+  utab.ts, per bookmark entry
+    │
+    ├─ no url ────────────────▶ empty slot: ignore  (ignore-utab-empty-slots)
+    │
+    ├─ blank title ───────────▶ title := url
+    │                           labelDisplay := "tooltip"
+    │
+    └─ createBookmark(folderId, title, url)     ← guard unchanged, now never
+                                                  rejects for empty-title
+
+  utab.ts, per folder
+    │
+    ├─ blank name ────────────▶ name := "New Folder"
+    │
+    └─ createFolder(targetId, name)             ← guard unchanged, now never
+                                                  rejects at all
+```
+
+Order matters: the empty-slot check must precede the title fallback, or every
+placeholder gets `title := ""` and 758 junk bookmarks get created.
+
 Mechanism already exists — `BookmarkLabelDisplay = "under-icon" | "tooltip"`
 (`storage/schema.ts:37`) and `setBookmarkLabelDisplay`
 (`storage/bookmarkSettings.ts:25`). This is composition, not new machinery.
 
+Measured scope: **25 entries** in the user's export (see "The measurement").
+A blank title with *no* url is an empty grid slot, not a rescuable bookmark, and
+is handled by `ignore-utab-empty-slots` — the fallback here applies only where a
+url exists.
+
 ### Open questions
 
 1. **What exactly becomes the title?** Full URL, `URL.hostname`, or hostname
-   minus `www.`? Lean: **full URL** — with `tooltip` display it never renders
-   on the canvas, and truncating discards the only identifying information the
-   entry has. Counter-argument: a full URL reads badly as a hover tooltip.
-2. **Change `createBookmark`, or only the importer?** `createBookmark`'s
-   `empty-title` rejection deliberately mirrors `updateBookmark`, keeping the
-   invariant "an import can never produce a nameless bookmark". Lean: do the
-   fallback **in the importer**, preserving the guard for the manual add/edit
-   form. Weakening `createBookmark` would silently weaken the edit UI too.
-3. **Blank *folder* names?** A folder has no URL to fall back to, so these stay
-   skipped. The skip category shrinks but does not disappear.
+   minus `www.`?
+
+   **RESOLVED — full URL (2026-07-26, by the data).** Two of the 25 rescuable
+   entries are `https://hrimsoft.atlassian.net/jira/software/projects/HC/boards/1`
+   and `https://hrimsoft.atlassian.net/wiki/spaces/HRIMCALEND/pages/65566/Syst…`
+   — same host, different paths. A hostname title would render them
+   indistinguishable, which is precisely the failure the fallback exists to
+   prevent. This confirms the earlier lean rather than merely agreeing with it.
+   The counter-argument (a full URL reads badly as a hover tooltip) is accepted
+   as the lesser cost: an ugly tooltip beats two identical ones.
+2. **Change `createBookmark`/`createFolder`, or only the importer?**
+
+   **RESOLVED — in the importer (2026-07-26, user decision).** Both
+   substitutions (`title := url` for bookmarks, `name := "New Folder"` for
+   folders) happen in `src/lib/import/utab.ts` before it calls the creation
+   functions. `createBookmark` and `createFolder` keep their `empty-title`
+   guards exactly as they are.
+
+   Rationale: those guards deliberately mirror `updateBookmark` and
+   `updateFolderTitle`, and they serve the manual add/edit forms as well as the
+   importer. An empty name in the New Folder dialog should stay rejected so the
+   user types one — it should not quietly become `"New Folder"`. Relaxing a
+   shared guard to serve one caller would change behaviour in a UI nobody asked
+   to change.
+
+   Consequences for implementation:
+
+   - `empty-title` becomes **unreachable from the uTab importer** on both the
+     folder and the bookmark path. It stays in the shared `SkipReason` union
+     for state-transfer, and the note added by `add-utab-import-report`
+     (tasks 2.2) predicting exactly this should be updated from "goes dead once
+     the blank-title fallback lands" to a statement of fact.
+   - `reasonForCreateError` (`utab.ts:112`) maps `empty-title` → `empty-title`
+     and everything else → `unsafe-url`. With `empty-title` unreachable, that
+     function collapses to always returning `unsafe-url`. Simplify it or keep
+     it total and defensive — but decide, do not leave a branch that can no
+     longer be taken looking live.
+   - The importer's own guards must run in a defined order against the empty
+     slot rule from `ignore-utab-empty-slots`: **empty slot first** (no url →
+     ignore entirely), *then* the title fallback. Reversing them would give
+     every empty slot a title of `""` and create 758 junk bookmarks.
+3. **Blank *folder* names?**
+
+   **RESOLVED — default to `"New Folder"` (2026-07-26, user decision).** A
+   folder has no url to fall back to, but unlike a bookmark it does not need
+   one: a folder with no name is still a container holding real bookmarks, and
+   dropping it drops its whole subtree. An import SHALL substitute the literal
+   `"New Folder"` for an empty or whitespace-only folder name rather than
+   skipping the folder.
+
+   `"New Folder"` is already this app's vocabulary for an unnamed folder — it
+   is the heading of the create-folder draft window
+   (`FolderSettingsWindow.tsx:330`), so the name a user sees on the canvas
+   matches the one they'd have seen in the dialog.
+
+   Two consequences worth stating:
+
+   - **Duplicates are possible and accepted.** An export with three blank
+     folder names produces three folders called `"New Folder"`. Chrome permits
+     duplicate sibling names, and the existing "Import Always Creates New
+     Items" requirement already establishes that import never de-duplicates.
+   - **This makes the `parent-skipped` path unreachable for uTab.**
+     `createFolder` (`create.ts:20`) can only return `ok: false` with
+     `empty-title` — that is the sole `BookmarkCreateError` it produces. Once
+     the importer never passes it a blank name, its failure branch
+     (`utab.ts:151-173`) and every `parent-skipped` row with it become dead
+     code. A `chrome.bookmarks.create` rejection still goes to the `fatal`
+     path, not here. `parent-skipped` stays in the shared `SkipReason` union
+     because state-transfer still emits it. Decide at implementation time
+     whether to delete the branch or keep it defensively — but do not leave it
+     undocumented, because a reader will otherwise assume it still fires.
+
+   Not exercised by the observed export: all 12 folders imported successfully
+   and there were zero `parent-skipped` rows, so this fixes a case the user has
+   not actually hit yet.
 4. **Should scheme-less URLs be repaired** (`google.com` → `https://google.com`)
-   rather than skipped? Not requested, but likely a large share of the 783
-   skips.
+   rather than skipped?
 
-   **CONFIRMED (2026-07-26, `add-utab-import-report` implemented):** a
-   scheme-less url IS skipped, and is reported with reason `unsafe-url` —
-   verified in real Chromium by `e2e/import-utab.spec.ts`, which asserts the
-   exact report line
-   `skipped,b-schemeless,"Reading, Writing",Scheme Less,google.com,unsafe-url,`.
-   The cause is that `new URL("google.com")` throws, and `isSafeNavigationUrl`
-   catches and returns false — so these entries are indistinguishable in the
-   report from a genuine `javascript:` bookmarklet, since both surface as
-   `unsafe-url`.
+   **DROPPED (2026-07-26).** The mechanism was confirmed — a scheme-less url is
+   skipped as `unsafe-url` because `new URL("google.com")` throws and
+   `isSafeNavigationUrl` catches it, verified in real Chromium by
+   `e2e/import-utab.spec.ts:151`. But the *incidence* is now measured at
+   **zero**: the user's export produced no `unsafe-url` skips at all. The
+   earlier guess that these were "likely a large share of the 783 skips" was
+   wrong; the 783 were empty grid slots.
 
-   Two follow-ups this raises for the blank-title change:
-   - Consider splitting `unsafe-url` into "unparseable" vs. "disallowed
-     scheme" so the report can tell a recoverable `google.com` apart from a
-     deliberately blocked `javascript:`. Without that split the report cannot
-     answer the question this thread is actually asking.
-   - The *share* of the user's 783 skips in each category still requires
-     running the report against their real export — the mechanism now exists,
-     but the measurement has not been taken.
+   Consequently the proposed split of `unsafe-url` into "unparseable" vs
+   "disallowed scheme" is also dropped. It was justified solely as the
+   instrument for taking this measurement, and the measurement came back empty
+   without it. Revisit only if a future export shows real `unsafe-url` skips.
 5. **Should any of the other rejected categories be relaxed for import**
-   (`chrome://`, `file:`)? Currently unexamined.
+   (`chrome://`, `file:`)?
+
+   **DROPPED — same reason.** Zero occurrences. Relaxing a security allowlist
+   is a real cost; there is now no measured benefit on the other side of it.
+
+### New, from the same report
+
+6. **The `error` column is empty on all 6 `icon-failed` rows.**
+   `attachPreviewIcon` (`utab.ts:83-96`) collapses three distinct failures —
+   `dataUrlToBlob` returning null, `validateIconFile` rejecting on the format
+   sniff, rejecting on the size cap — into a bare `false`. The report has an
+   `error` column that only the `fatal` path ever fills, so the user is told an
+   icon failed but never why. Small, independent, unclaimed by any change yet.
+7. **`_id` is not an opaque key.** Three warning rows carry
+   `id=https://www.amazon.com/`, `id=https://www.youtube.com/`,
+   `id=https://www.netflix.com/` — uTab's seeded default bookmarks use their
+   url as `_id`. Harmless today (`asId` passes any non-empty string through),
+   but worth knowing before anything treats that column as an identifier. `_id`
+   also repeats across folders: `lEt1g9gkJ7zLNX` (Clockify) appears under both
+   Education and Event Analytics, so it is not even unique within one export.
 
 ---
 
@@ -353,11 +549,18 @@ end — otherwise the one case most needing a log (the crash) produces none.
 ## Scoping and sequencing — SETTLED
 
 ```
-   Thread 4 (report)       ---- BUILD FIRST; enables/simplifies 1 and 3
+   Thread 4 (report)  ---- DONE, archived 2026-07-26
         |
-        +--> Thread 1 (blank titles)  contained: utab.ts + spec
-        |
-        +--> Thread 3 (root entry)    UI; couples to the capacity change
+        |  its output reshaped everything downstream:
+        v
+   ignore-utab-empty-slots  ---- NEXT; removes 758 of the 783 "skips"
+        |                         "skipped 783" -> "skipped 25"
+        v
+   Thread 1 (blank titles)  ---- contained: utab.ts + spec; scope now 25 entries
+                                 the unsafe-url work under it is DROPPED (zero
+                                 occurrences measured)
+
+   Thread 3 (root entry)    ---- UI; couples to the capacity change
 
    Thread 2 (capacity)  ---- SPLIT OUT into its own change:
                              openspec/changes/place-bookmarks-at-real-grid-capacity/
@@ -387,12 +590,31 @@ handled by `place-bookmarks-at-real-grid-capacity`.)
 
 ## Immediate next step
 
-Write the proposal for Thread 4 (the report) — the first unit of work. All of
-its blocking questions are now resolved; only open question 5 (what to print in
-the `folder` column for bookmarks orphaned by a skipped folder — proposed:
-empty, with reason `parent-skipped`) and the `status` column's position in the
-header remain, and both are safe to settle while drafting.
+~~Write the proposal for Thread 4 (the report).~~ **Done** — implemented and
+archived 2026-07-26.
 
-Once the report ships, run it against the user's real uTab JSON to settle
-Thread 1's empirical open questions (scheme-less URLs, `chrome://`, the true
-blank-title share of the 783 skips).
+~~Run it against the user's real uTab JSON to settle Thread 1's empirical open
+questions.~~ **Done** — see "The measurement" under Thread 1. Result: zero
+`unsafe-url` skips, 758 of the 783 skips were empty uTab grid slots, and 25 were
+genuine blank-titled bookmarks.
+
+Next: implement **`openspec/changes/ignore-utab-empty-slots/`** (proposed, all
+artifacts complete).
+
+**Thread 1 is split out into
+`openspec/changes/import-blank-named-utab-entries/`** — PROPOSED, all artifacts
+complete. All five of its open questions are resolved or dropped: full-URL
+title (Q1), importer-side substitution (Q2), `"New Folder"` for blank folder
+names (Q3), `unsafe-url` work dropped (Q4, Q5). Scope: the 25 measured entries
+plus the folder default.
+
+Still unclaimed by any change: questions 6 and 7 — the empty `error` column on
+`icon-failed` rows, and `_id` not being an opaque key. Question 6 is a real
+diagnostic gap and should be picked up by something.
+
+Also still open: Thread 3 (root-folder import entry point) on its own four
+questions, and its sequencing against `place-bookmarks-at-real-grid-capacity`.
+
+Thread 3 (root-folder import entry point) is untouched by the measurement and
+remains open on its own four questions; its sequencing against
+`place-bookmarks-at-real-grid-capacity` is still the real decision there.

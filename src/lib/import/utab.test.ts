@@ -81,7 +81,7 @@ describe("importUtabExport — happy path", () => {
 });
 
 describe("importUtabExport — skip and report", () => {
-  it("skips blank folder names (with their bookmarks), blank titles, and unsafe urls, importing valid siblings", async () => {
+  it("skips only unusable urls, defaulting blank names rather than dropping them", async () => {
     const json = JSON.stringify({
       folders: [
         {
@@ -101,17 +101,286 @@ describe("importUtabExport — skip and report", () => {
 
     const result = await importUtabExport("1", json);
 
-    // Blank folder = 1 + its 1 bookmark = 2 skipped; blank title + unsafe url = 2 more.
+    // The blank folder name and the blank bookmark title both fall back now, so
+    // the unsafe url is the only entry left that cannot be imported.
     expect(result.ok && result.summary).toEqual({
-      foldersCreated: 1,
-      bookmarksCreated: 1,
-      skipped: 4,
+      foldersCreated: 2,
+      bookmarksCreated: 3,
+      skipped: 1,
     });
 
     const subfolders = await getSubfolders("1");
-    expect(subfolders.map((f) => f.title)).toEqual(["Good"]);
-    const bookmarks = await getBookmarksInFolder(subfolders[0]!.id);
+    expect(subfolders.map((f) => f.title)).toEqual(["New Folder", "Good"]);
+    expect(
+      (await getBookmarksInFolder(subfolders[0]!.id)).map((b) => b.title),
+    ).toEqual(["Orphan"]);
+    expect(
+      (await getBookmarksInFolder(subfolders[1]!.id)).map((b) => b.title),
+    ).toEqual(["https://blank-title.example", "Keep"]);
+  });
+});
+
+describe("importUtabExport — empty uTab slots", () => {
+  it("ignores an entry with no url, in every form the absence takes", async () => {
+    const json = JSON.stringify({
+      folders: [
+        {
+          name: "Slots",
+          bookmarks: [
+            { title: "Keep", url: "https://keep.example" },
+            { _id: "s1" },
+            { _id: "s2", title: "", url: "" },
+            { _id: "s3", url: "   " },
+            { _id: "s4", url: 42 },
+          ],
+        },
+      ],
+    });
+
+    const result = await importUtabExport("1", json);
+
+    expect(result.ok && result.summary).toEqual({
+      foldersCreated: 1,
+      bookmarksCreated: 1,
+      skipped: 0,
+    });
+    expect(result.ok && result.rows).toEqual([]);
+
+    const bookmarks = await getBookmarksInFolder(
+      (await getSubfolders("1"))[0]!.id,
+    );
     expect(bookmarks.map((b) => b.title)).toEqual(["Keep"]);
+  });
+
+  it("reports nothing at all when every unimported entry is a slot", async () => {
+    const json = JSON.stringify({
+      folders: [{ name: "AllSlots", bookmarks: [{}, {}, {}] }],
+    });
+
+    const result = await importUtabExport("1", json);
+
+    expect(result.ok && result.summary).toEqual({
+      foldersCreated: 1,
+      bookmarksCreated: 0,
+      skipped: 0,
+    });
+    expect(result.ok && result.rows).toEqual([]);
+  });
+
+  it("still skips and reports an entry whose url is present but unusable", async () => {
+    const json = JSON.stringify({
+      folders: [
+        {
+          name: "Boundary",
+          bookmarks: [
+            { _id: "s1" },
+            { _id: "b1", title: "", url: "https://blank-title.example" },
+            { _id: "b2", title: "Danger", url: "javascript:alert(1)" },
+            { _id: "b3", title: "Scheme Less", url: "google.com" },
+          ],
+        },
+      ],
+    });
+
+    const result = await importUtabExport("1", json);
+
+    // b1 has a usable url, so its blank title falls back rather than skipping;
+    // only the two unusable urls remain skips. The slot is not an entry at all.
+    expect(result.ok && result.summary.skipped).toBe(2);
+    expect(result.ok && result.rows.map((r) => [r.id, r.reason])).toEqual([
+      ["b2", "unsafe-url"],
+      ["b3", "unsafe-url"],
+    ]);
+    expect(result.ok && result.summary.bookmarksCreated).toBe(1);
+  });
+
+  it("ignores slots inside a blank-named folder, which is itself defaulted rather than dropped", async () => {
+    const json = JSON.stringify({
+      folders: [
+        {
+          _id: "f1",
+          name: "   ",
+          bookmarks: [
+            { _id: "s1" },
+            { _id: "s2", url: "" },
+            { _id: "b1", title: "Orphan", url: "https://orphan.example" },
+          ],
+        },
+      ],
+    });
+
+    const result = await importUtabExport("1", json);
+
+    expect(result.ok && result.summary).toEqual({
+      foldersCreated: 1,
+      bookmarksCreated: 1,
+      skipped: 0,
+    });
+    expect(result.ok && result.rows).toEqual([]);
+    const subfolder = (await getSubfolders("1"))[0]!;
+    expect(subfolder.title).toBe("New Folder");
+    expect(
+      (await getBookmarksInFolder(subfolder.id)).map((b) => b.title),
+    ).toEqual(["Orphan"]);
+  });
+});
+
+describe("importUtabExport — blank folder names", () => {
+  it('imports a folder with a blank name as "New Folder"', async () => {
+    const json = JSON.stringify({
+      folders: [
+        { _id: "f1", name: "", bookmarks: [] },
+        { _id: "f2", name: "   ", bookmarks: [] },
+      ],
+    });
+
+    const result = await importUtabExport("1", json);
+
+    expect(result.ok && result.summary).toEqual({
+      foldersCreated: 2,
+      bookmarksCreated: 0,
+      skipped: 0,
+    });
+    expect(result.ok && result.rows).toEqual([]);
+    expect((await getSubfolders("1")).map((f) => f.title)).toEqual([
+      "New Folder",
+      "New Folder",
+    ]);
+  });
+
+  it("keeps a blank-named folder's bookmarks instead of dropping the subtree", async () => {
+    const json = JSON.stringify({
+      folders: [
+        {
+          name: " ",
+          bookmarks: [
+            { title: "Kept", url: "https://kept.example" },
+            { title: "AlsoKept", url: "https://also.example" },
+          ],
+        },
+      ],
+    });
+
+    const result = await importUtabExport("1", json);
+
+    expect(result.ok && result.summary).toEqual({
+      foldersCreated: 1,
+      bookmarksCreated: 2,
+      skipped: 0,
+    });
+    const subfolder = (await getSubfolders("1"))[0]!;
+    expect(subfolder.title).toBe("New Folder");
+    expect(
+      (await getBookmarksInFolder(subfolder.id)).map((b) => b.title),
+    ).toEqual(["Kept", "AlsoKept"]);
+  });
+});
+
+describe("importUtabExport — blank bookmark titles", () => {
+  it("imports a blank-titled bookmark under its full url, shown only as a tooltip", async () => {
+    const json = JSON.stringify({
+      folders: [
+        {
+          name: "Rescued",
+          bookmarks: [
+            { _id: "b1", title: "", url: "https://example.com/deep/path?a=1" },
+            { _id: "b2", title: "   ", url: "https://example.com/other" },
+          ],
+        },
+      ],
+    });
+
+    const result = await importUtabExport("1", json);
+
+    expect(result.ok && result.summary).toEqual({
+      foldersCreated: 1,
+      bookmarksCreated: 2,
+      skipped: 0,
+    });
+    expect(result.ok && result.rows).toEqual([]);
+
+    const bookmarks = await getBookmarksInFolder(
+      (await getSubfolders("1"))[0]!.id,
+    );
+    expect(bookmarks.map((b) => b.title)).toEqual([
+      "https://example.com/deep/path?a=1",
+      "https://example.com/other",
+    ]);
+    for (const bookmark of bookmarks) {
+      expect((await getBookmarkSettings(bookmark.id)).labelDisplay).toBe(
+        "tooltip",
+      );
+    }
+  });
+
+  it("keeps entries that differ only by path distinguishable", async () => {
+    const json = JSON.stringify({
+      folders: [
+        {
+          name: "Same Host",
+          bookmarks: [
+            { title: "", url: "https://host.example/jira/boards/1" },
+            { title: "", url: "https://host.example/wiki/pages/2" },
+          ],
+        },
+      ],
+    });
+
+    const result = await importUtabExport("1", json);
+
+    const titles = (
+      await getBookmarksInFolder((await getSubfolders("1"))[0]!.id)
+    ).map((b) => b.title);
+    expect(result.ok && result.summary.bookmarksCreated).toBe(2);
+    expect(new Set(titles).size).toBe(2);
+    expect(titles).toEqual([
+      "https://host.example/jira/boards/1",
+      "https://host.example/wiki/pages/2",
+    ]);
+  });
+
+  it("leaves a bookmark that has a real title at the default label display", async () => {
+    const json = JSON.stringify({
+      folders: [
+        {
+          name: "Named",
+          bookmarks: [{ title: "Real Title", url: "https://real.example" }],
+        },
+      ],
+    });
+
+    await importUtabExport("1", json);
+
+    const bookmark = (
+      await getBookmarksInFolder((await getSubfolders("1"))[0]!.id)
+    )[0]!;
+    expect(bookmark.title).toBe("Real Title");
+    expect((await getBookmarkSettings(bookmark.id)).labelDisplay).toBe(
+      "under-icon",
+    );
+  });
+
+  it("does not let the fallback smuggle an unsafe url past the safety check", async () => {
+    const json = JSON.stringify({
+      folders: [
+        {
+          name: "Unsafe",
+          bookmarks: [
+            { _id: "b1", title: "", url: "javascript:alert(1)" },
+            { _id: "b2", title: "", url: "google.com" },
+          ],
+        },
+      ],
+    });
+
+    const result = await importUtabExport("1", json);
+
+    expect(result.ok && result.summary.bookmarksCreated).toBe(0);
+    expect(result.ok && result.summary.skipped).toBe(2);
+    expect(result.ok && result.rows.map((r) => [r.id, r.reason])).toEqual([
+      ["b1", "unsafe-url"],
+      ["b2", "unsafe-url"],
+    ]);
   });
 });
 
@@ -201,7 +470,7 @@ describe("importUtabExport — report rows", () => {
         {
           name: "Good",
           bookmarks: [
-            { _id: "u1", title: "", url: "https://blank-title.example" },
+            { _id: "u1", title: "", url: "javascript:void(0)" },
             { _id: "u2", title: "Danger", url: "javascript:alert(1)" },
             { _id: "u3", title: "Keep", url: "https://keep.example" },
           ],
@@ -216,9 +485,11 @@ describe("importUtabExport — report rows", () => {
         status: "skipped",
         id: "u1",
         folder: "Good",
+        // The entry's own blank title, not the url substituted for it: the row
+        // points back at the source file, not at what would have been created.
         title: "",
-        url: "https://blank-title.example",
-        reason: "empty-title",
+        url: "javascript:void(0)",
+        reason: "unsafe-url",
       },
       {
         status: "skipped",
@@ -227,33 +498,6 @@ describe("importUtabExport — report rows", () => {
         title: "Danger",
         url: "javascript:alert(1)",
         reason: "unsafe-url",
-      },
-    ]);
-  });
-
-  it("records a blank-name folder and its orphaned bookmarks, leaving the orphans' folder empty", async () => {
-    const json = JSON.stringify({
-      folders: [
-        {
-          _id: "f1",
-          name: "   ",
-          bookmarks: [
-            { _id: "b1", title: "Orphan", url: "https://orphan.example" },
-          ],
-        },
-      ],
-    });
-
-    const result = await importUtabExport("1", json);
-
-    expect(result.ok && result.rows).toEqual([
-      { status: "skipped", id: "f1", title: "   ", reason: "empty-title" },
-      {
-        status: "skipped",
-        id: "b1",
-        title: "Orphan",
-        url: "https://orphan.example",
-        reason: "parent-skipped",
       },
     ]);
   });

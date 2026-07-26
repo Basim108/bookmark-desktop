@@ -8,6 +8,9 @@
           "_id": "b-orphan",
           "title": "Orphaned Bookmark",
           "url": "https://example.com/orphan"
+        },
+        {
+          "_id": "b-orphan-slot"
         }
       ]
     },
@@ -35,6 +38,19 @@
           "_id": "b-keep",
           "title": "Keeper",
           "url": "https://example.com/keeper"
+        },
+        {
+          "_id": "b-untitled",
+          "title": "",
+          "url": "https://example.com/untitled/deep/path"
+        },
+        {
+          "_id": "b-slot"
+        },
+        {
+          "_id": "b-slot-blank",
+          "title": "",
+          "url": "   "
         }
       ]
     }
