@@ -57,7 +57,7 @@
     "eslint-plugin-react-refresh": "^0.5.3",
     "fake-indexeddb": "^6.2.5",
     "husky": "^9.1.7",
-    "jsdom": "^29.1.1",
+    "jsdom": "^30.0.1",
     "lint-staged": "^17.0.8",
     "prettier": "^3.9.4",
     "retire": "^5.4.3",
