@@ -1,10 +1,15 @@
 # Design — place-bookmarks-at-real-grid-capacity
 
-> **Status: EXPLORATION NOTES, NOT A SETTLED DESIGN.**
-> Captured from an explore-mode session on 2026-07-26. Split out of
-> `rework-utab-import` (see that change's design.md for the sibling import
-> threads). Every "Open question" below is genuinely unresolved. Nothing here
-> has been implemented.
+> **Status: SETTLED. Approach A. All five open questions resolved 2026-08-01.**
+> Originally captured from an explore-mode session on 2026-07-26 and split out
+> of `rework-utab-import` (see that change's design.md for the sibling import
+> threads). A second explore session on 2026-08-01 resolved every open question
+> and produced `proposal.md`. Nothing has been implemented yet.
+>
+> **Decision: approach A** — the page persists its measured capacity; the
+> service worker reads it. Global key, last-measured-wins, future placements
+> only. See "Resolved questions" below for the other four, and "Candidate
+> approaches" for why B, C and D lost.
 
 ## Why this is its own change
 
@@ -95,43 +100,141 @@ context*.
 | C | **Reflow on any positions-changed event**, not just column growth                                                                   | Import + any other stale foreign write                       | Would fight user drags; needs a "did I write this?" discriminator                                                                                     |
 | D | **Importer places inline; SW stands down via a lock** — reuses the `transferImportLocked` mechanism already proven for state transfer | Import, deterministically, with no race                      | Two placement authorities to keep in sync; contradicts the same spec line as B; does nothing for non-import creation paths                            |
 
-**Lean: A is the root-cause fix** — the defect is literally "the SW does not
-know the capacity", and A is the only option that answers that sentence. B and
-D fix only the import path and leave Chrome-star bookmarking broken.
+**DECIDED: A (2026-08-01, user decision).** The defect is literally "the SW does
+not know the capacity", and A is the only option that answers that sentence. B
+and D fix only the import path and leave Chrome-star bookmarking broken. C is
+not adopted — see resolved question 3.
 
-## Open questions
+## Resolved questions
 
-1. **Global or per-folder capacity?** It derives purely from canvas size
-   (window + sidebar width), so one global key suffices today. But if
-   per-folder grid settings are still planned (the `DEFAULT_GRID_CAPACITY`
-   comment references "Group 4… per-folder resolved grid settings"), the
-   storage shape should anticipate that now.
-2. **Repair for already-placed bookmarks.** A fixes future placements only. Do
-   stranded positions from imports already performed get a one-time repack, or
-   is "delete and re-import" acceptable? Affects the user's existing uTab
-   import directly.
-3. **Stale capacity across devices/monitors.** Imported on a laptop, viewed on
-   an external monitor — A stores the last-measured value. Acceptable, or does
-   this need approach C as a backstop?
-4. **Is D worth adopting *alongside* A, given the known race?** A prior finding
-   (session memory, `e2e-sw-placement-race`) is that SW auto-placement races the
-   page's own backfill write and some placements are lost forever. D would
-   eliminate that race for the highest-volume creation path. But it requires
-   amending the `bookmark-import` spec requirement "Imported bookmarks are
-   positioned automatically … the importer does not write positions itself".
-5. **Can the E2E workaround be removed?** The suite currently avoids page-fill
-   assertions above 24 cells. Confirm and clean up as part of this change.
+All five were resolved on 2026-08-01. Nothing below is still open.
 
-## Specs likely affected
+1. **Global or per-folder capacity?**
 
-- `openspec/specs/bookmark-canvas/spec.md` — the source of placement capacity.
-- `openspec/specs/bookmark-import/spec.md` — only if approach B or D wins, to
-  amend "the importer does not write positions itself".
+   **RESOLVED — a single global value (user decision).** Capacity derives purely
+   from canvas geometry (window size minus sidebar width), which no folder can
+   vary today. The storage shape does *not* pre-generalize for the "Group 4…
+   per-folder resolved grid settings" that `DEFAULT_GRID_CAPACITY`'s comment
+   references — that wiring never happened anywhere, and speculatively shaping a
+   key around it would add a dimension with no reader. If per-folder grid
+   settings ever land, the key gains structure then.
+
+2. **Repair for already-placed bookmarks?**
+
+   **RESOLVED — no repair; future placements only (user decision).** Bookmarks
+   already stranded on page 2 by a past import keep their stored positions. The
+   remedy is delete-and-re-import.
+
+   Stated plainly because it has a real consequence the user accepted
+   explicitly: **their own existing ~1000-bookmark uTab import stays broken**
+   after this change ships. The alternative — a one-time repack keyed on
+   detecting positions written under a smaller capacity — was not costed,
+   because a migration that repacks a user's entire canvas is a larger and
+   riskier change than the fix itself, and it would silently move icons the user
+   may have since arranged by hand.
+
+3. **Stale capacity across devices/monitors?**
+
+   **RESOLVED — store the last-measured value; accept staleness (user
+   decision).** Two new-tab pages open at different window sizes will overwrite
+   each other, and the most recent measurement wins with no reconciliation.
+
+   Approach C (reflow on any positions-changed event) is **not** adopted as a
+   backstop. It would need a "did I write this?" discriminator to avoid fighting
+   user drags, which is real machinery to defend against a case — placing
+   bookmarks against a capacity measured on a differently-sized window — whose
+   worst outcome is the same class of cosmetic mis-placement the user already
+   accepted in question 2.
+
+4. **Is D worth adopting alongside A, given the known race?**
+
+   **RESOLVED — no. D is dropped, and its premise is stale.**
+
+   D's main justification was the placement race recorded on 2026-07-25: SW
+   per-item placement and the page's whole-map backfill write clobbering each
+   other, losing placements *permanently*. **That race was fixed on 2026-07-26**
+   by `make-position-writes-atomic` (commit `8250da3`, archived as
+   `openspec/changes/archive/2026-07-26-make-position-writes-atomic/`).
+   `withPositionsLock` (`src/lib/concurrency/positionsLock.ts:39`) is a
+   `navigator.locks` named lock shared by the service worker and every new-tab
+   page — they share the `chrome-extension://<id>` origin — and every
+   read-modify-write in `src/lib/storage/positions.ts` now holds it across both
+   halves. Verified 2026-08-01: no unlocked write path remains.
+
+   What D would still buy: the page places against a capacity it *just*
+   measured, so zero staleness. But question 3 accepted staleness, which
+   removes that edge. What it costs: fixes the import path only (Chrome-star and
+   sync-created bookmarks still need A anyway), creates a second placement
+   authority to keep in sync forever, and requires amending `bookmark-import`'s
+   "the importer does not write positions itself". Cost without benefit.
+
+   The lock does impose one constraint on A: `placeNewBookmark` reads capacity
+   *inside* `withPositionsLock`, and Web Locks are **not reentrant**
+   (`positionsLock.ts:26-36`). The capacity accessor must not take that lock —
+   it is a different storage key and must stay that way.
+
+5. **Can the E2E workaround be removed?**
+
+   **RESOLVED — yes, and a real page-fill test replaces it (user decision).**
+   Confirmed present at `e2e/grid-fit.spec.ts:144-146`:
+
+   ```
+   // … and short enough that a page's capacity stays under the 24 cells the SW
+   // seeds per page — paginate() honours stored pages and never compacts
+   // forward, so a taller viewport could never fill page 0.
+   await page.setViewportSize({ width: 1500, height: 700 });
+   ```
+
+   Remove the constraint and the comment, and add coverage asserting a canvas
+   page fills **past** 24 cells at a viewport whose real capacity exceeds 24 —
+   the assertion that is impossible today and is the direct regression test for
+   this change.
+
+   Note this became viable only because of the atomic-writes fix in question 4.
+   The prior guidance was to never poll for "all placed" because placements
+   could be lost forever; under the lock that barrier terminates.
+
+## Newly identified — the bootstrap case
+
+Not among the original five, surfaced while writing the proposal.
+
+On a fresh profile the service worker can receive `onCreated` before any
+new-tab page has ever rendered and measured a capacity. `DEFAULT_GRID_CAPACITY`
+is therefore **kept, not deleted** — it becomes the genuine "never measured yet"
+bootstrap default rather than the stale placeholder it is today. Its comment at
+`placement.ts:8` currently promises Group 4 wiring that never arrived and must
+be rewritten to say what the constant actually is now.
+
+## Specs affected — SETTLED
+
+- `openspec/specs/bookmark-canvas/spec.md` — the **Next-Free-Cell Placement**
+  requirement gains the capacity that "next free cell" is computed against.
+  Today it is silent on this, which is precisely why two contexts could disagree
+  without violating it.
+- `openspec/specs/state-transfer/spec.md` — the **Export Entire Extension State
+  to a JSON File** requirement gains an explicit exclusion for the stored
+  measured capacity, mirroring the existing "SHALL NOT contain the last opened
+  folder" clause. Same rationale as `lastFolderId`
+  (`src/lib/storage/schema.ts:63-71`): device-derived state, not a configured
+  setting. Restoring one machine's capacity onto another would reintroduce this
+  exact defect.
+- `openspec/specs/bookmark-import/spec.md` — **not affected.** It would have
+  been only under approach B or D, to amend "the importer does not write
+  positions itself". Both were dropped.
 
 ## Relationship to the import work
 
-Coupled to `rework-utab-import`'s root-folder import button: adding an easier
-import entry point means more imports, and every one hits this bug. **Shipping
-the root-import button without this fix makes the bug more visible, not less.**
-Sequencing between the two changes is therefore a real decision, not a
-formality.
+Coupled to `rework-utab-import`'s root-folder import button (Thread 3): adding
+an easier import entry point means more imports, and every one hits this bug.
+**Shipping the root-import button without this fix makes the bug more visible,
+not less.** Sequencing between the two changes is therefore a real decision, not
+a formality.
+
+**Still open.** This change is now proposed and Thread 3 has no proposal at all,
+so the natural order is this one first — but that has not been decided
+explicitly, and Thread 3 still carries its own four unresolved questions.
+
+The other two import threads this was split from have since shipped
+(`2026-07-26-ignore-utab-empty-slots`,
+`2026-07-26-import-blank-named-utab-entries`), so Thread 3 is the only sibling
+left.

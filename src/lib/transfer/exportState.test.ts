@@ -121,4 +121,19 @@ describe("exportState", () => {
     expect(JSON.stringify(result)).not.toContain("lastFolderId");
     expect(result.general).not.toHaveProperty("lastFolderId");
   });
+
+  it("does not export the measured grid capacity", async () => {
+    // Same class of reason as the last opened folder: derived from one
+    // machine's window and display geometry, not a setting the user chose.
+    // Restoring it onto another profile would make that profile place
+    // bookmarks against a grid its canvas does not have — the exact defect
+    // persisting the measurement exists to prevent.
+    mock.addNode(folder("1", "0", "Bookmarks Bar", 0));
+    await setStorageValue(STORAGE_KEYS.GRID_CAPACITY, { cols: 9, rows: 5 });
+
+    const result = await exportState();
+
+    expect(JSON.stringify(result)).not.toContain("gridCapacity");
+    expect(result.general).not.toHaveProperty("gridCapacity");
+  });
 });

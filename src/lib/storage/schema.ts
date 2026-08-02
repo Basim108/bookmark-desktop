@@ -1,4 +1,4 @@
-import type { GridCell } from "../grid/types";
+import type { GridCapacity, GridCell } from "../grid/types";
 
 /** Positions of a folder's direct bookmark children: bookmarkId -> cell. */
 export type FolderPositions = Record<string, GridCell>;
@@ -69,6 +69,24 @@ export interface StorageSchema {
    * it never read-modify-writes a record another writer shares.
    */
   lastFolderId: string;
+  /**
+   * The grid capacity most recently measured by a new-tab page, so contexts
+   * that cannot measure one — chiefly the background service worker placing a
+   * bookmark created by Chrome's own UI or arriving via sync — place against
+   * the capacity the canvas actually renders at rather than a guess.
+   *
+   * Device-derived measurement, not a setting the user configured: it follows
+   * from window and display geometry. So, like lastFolderId, it is excluded
+   * from state export/import — restoring one machine's capacity onto another
+   * would reintroduce the very mismatch this key exists to prevent.
+   *
+   * Global rather than per-folder because capacity derives from canvas
+   * geometry, which no folder varies. Last-measured-wins: two new-tab pages at
+   * different window sizes overwrite each other and nothing reconciles them.
+   * Held as its own top-level key so writing it never read-modify-writes a
+   * record another writer shares.
+   */
+  gridCapacity: GridCapacity;
 }
 
 export const STORAGE_KEYS = {
@@ -78,4 +96,5 @@ export const STORAGE_KEYS = {
   SIDEBAR_WIDTH: "sidebarWidth",
   GENERAL_SETTINGS: "generalSettings",
   LAST_FOLDER_ID: "lastFolderId",
+  GRID_CAPACITY: "gridCapacity",
 } as const satisfies Record<string, keyof StorageSchema>;

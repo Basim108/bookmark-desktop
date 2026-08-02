@@ -6,6 +6,7 @@ import {
   subscribeToBookmarkChanges,
 } from "./events";
 import { getFolderPositions } from "../storage/positions";
+import { setMeasuredGridCapacity } from "../storage/gridCapacity";
 import {
   getBookmarkSettings,
   setBookmarkHasCustomIcon,
@@ -84,6 +85,65 @@ describe("onCreated", () => {
 
     const positions = await getFolderPositions("folder-1");
     expect(positions.f1).toBeUndefined();
+  });
+
+  /**
+   * Creates `count` bookmarks in one folder, one onCreated at a time, exactly
+   * as Chrome delivers them.
+   */
+  async function createBookmarks(folderId: string, count: number) {
+    for (let i = 0; i < count; i++) {
+      const bookmark = node(`b${i}`, folderId);
+      mock.addNode(bookmark);
+      mock.chrome.bookmarks.onCreated.emit(bookmark.id, bookmark);
+      await flush();
+    }
+  }
+
+  it("fills a page to the measured capacity before moving to the next page", async () => {
+    // A page measured 9x5 = 45 cells. The 25th bookmark used to land on page 1
+    // because placement assumed the 6x4 bootstrap regardless of what the canvas
+    // could actually show.
+    await setMeasuredGridCapacity({ cols: 9, rows: 5 });
+
+    await createBookmarks("folder-1", 25);
+
+    const positions = await getFolderPositions("folder-1");
+    expect(positions.b24).toEqual({ page: 0, row: 2, col: 6 });
+    expect(Object.values(positions).every((cell) => cell.page === 0)).toBe(
+      true,
+    );
+  });
+
+  it("overflows to the next page only once the measured capacity is full", async () => {
+    await setMeasuredGridCapacity({ cols: 9, rows: 5 });
+
+    await createBookmarks("folder-1", 46);
+
+    const positions = await getFolderPositions("folder-1");
+    expect(positions.b44).toEqual({ page: 0, row: 4, col: 8 });
+    expect(positions.b45).toEqual({ page: 1, row: 0, col: 0 });
+  });
+
+  it("places against the bootstrap capacity when no page has ever measured one", async () => {
+    // Fresh profile: the service worker can be asked to place a bookmark before
+    // any new-tab page has rendered. Behaviour must match what shipped before.
+    await createBookmarks("folder-1", 25);
+
+    const positions = await getFolderPositions("folder-1");
+    expect(positions.b23).toEqual({ page: 0, row: 3, col: 5 });
+    expect(positions.b24).toEqual({ page: 1, row: 0, col: 0 });
+  });
+
+  it("uses the most recent measurement when it changes between placements", async () => {
+    await setMeasuredGridCapacity({ cols: 9, rows: 5 });
+    await createBookmarks("folder-1", 1);
+
+    await setMeasuredGridCapacity({ cols: 2, rows: 2 });
+    await createBookmarks("folder-2", 5);
+
+    const positions = await getFolderPositions("folder-2");
+    expect(positions.b4).toEqual({ page: 1, row: 0, col: 0 });
   });
 });
 

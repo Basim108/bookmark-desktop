@@ -7,6 +7,7 @@ import {
   removeBookmarkPosition,
   setFolderPositionsUnlocked,
 } from "../storage/positions";
+import { getMeasuredGridCapacity } from "../storage/gridCapacity";
 import { removeBookmarkSettings } from "../storage/bookmarkSettings";
 import { removeFolderSettings } from "../storage/folderSettings";
 import { deleteIcon } from "../storage/iconDb";
@@ -21,14 +22,19 @@ const mutex = createMutex();
  * that must see the same snapshot: releasing in between would let a new-tab
  * page's whole-map write drop this placement, and would also let a concurrent
  * placement pick the same "next free" cell.
+ *
+ * The capacity is resolved *before* the lock, deliberately. It keeps the
+ * critical section short, and it removes any chance of a future edit to
+ * storage/gridCapacity.ts deadlocking here — Web Locks are not reentrant. A
+ * capacity published by another tab between this read and the write only means
+ * one bookmark placed against the previous measurement, which is exactly the
+ * last-measured-wins behaviour this key is specified to have.
  */
 async function placeNewBookmark(folderId: string, bookmarkId: string) {
+  const capacity = (await getMeasuredGridCapacity()) ?? DEFAULT_GRID_CAPACITY;
   await withPositionsLock(async () => {
     const existing = await getFolderPositionsUnlocked(folderId);
-    const cell = getNextFreeCell(
-      Object.values(existing),
-      DEFAULT_GRID_CAPACITY,
-    );
+    const cell = getNextFreeCell(Object.values(existing), capacity);
     await setFolderPositionsUnlocked(folderId, {
       ...existing,
       [bookmarkId]: cell,
