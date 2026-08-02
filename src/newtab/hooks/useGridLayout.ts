@@ -18,6 +18,7 @@ import {
 } from "../../lib/grid/sizing";
 import type { GridCapacity } from "../../lib/grid/types";
 import type { LayoutCell } from "../../lib/grid/layout";
+import { setMeasuredGridCapacity } from "../../lib/storage/gridCapacity";
 import { onStorageKeysChanged } from "../../lib/storage/onChanged";
 import { setBookmarkPositions } from "../../lib/storage/positions";
 import { STORAGE_KEYS } from "../../lib/storage/schema";
@@ -78,6 +79,11 @@ export function useGridLayout(folderId: string): UseGridLayoutResult {
     page: 0,
   });
   const previousCapacityRef = useRef<GridCapacity | null>(null);
+  // Distinct from previousCapacityRef, which is pinned to the last capacity
+  // that *mutated* stored positions (and deliberately survives a shrink). This
+  // one tracks what was last published to storage, so an unchanged capacity
+  // does not rewrite the key on every resize frame.
+  const lastPublishedCapacityRef = useRef<GridCapacity | null>(null);
 
   const dataLoaded = folderData?.folderId === folderId;
 
@@ -167,6 +173,35 @@ export function useGridLayout(folderId: string): UseGridLayoutResult {
       cancelled = true;
     };
   }, [folderId, dataLoaded, capacity, size.width, size.height]);
+
+  // Publish the measured capacity so contexts that cannot measure one — chiefly
+  // the background service worker placing a bookmark created by Chrome's own UI
+  // or arriving via sync — place against the grid this canvas actually renders.
+  //
+  // Gated on a non-zero measurement: before the container is laid out,
+  // computeGridCapacity floors to the 1x1 minimum, and persisting that would
+  // strand every bookmark past the first on its own page. Deliberately NOT
+  // gated on dataLoaded — capacity is pure canvas geometry and has nothing to
+  // do with which folder's bookmarks have loaded, so waiting on them would
+  // withhold a valid measurement for no reason.
+  //
+  // Last-measured-wins across tabs by design (see storage/gridCapacity.ts), so
+  // there is nothing to reconcile and no cleanup on unmount.
+  useEffect(() => {
+    if (size.width === 0 || size.height === 0) {
+      return;
+    }
+    const previous = lastPublishedCapacityRef.current;
+    if (
+      previous &&
+      previous.cols === capacity.cols &&
+      previous.rows === capacity.rows
+    ) {
+      return;
+    }
+    lastPublishedCapacityRef.current = capacity;
+    void setMeasuredGridCapacity(capacity);
+  }, [capacity, size.width, size.height]);
 
   // Cross-tab live sync: another open new-tab page's position writes arrive
   // here via chrome.storage.onChanged. The writing tab already resolved

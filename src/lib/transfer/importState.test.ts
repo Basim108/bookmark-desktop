@@ -625,6 +625,24 @@ describe("importState — the last opened folder is left alone", () => {
   });
 });
 
+describe("importState — the measured grid capacity is left alone", () => {
+  it("leaves the importing profile's own measurement untouched", async () => {
+    // The file carries no capacity, and the importing machine's measurement is
+    // the only one that describes its canvas. Clearing it would push the next
+    // placements back onto the bootstrap grid until a page re-rendered.
+    seedRoots();
+    await setStorageValue(STORAGE_KEYS.GRID_CAPACITY, { cols: 9, rows: 5 });
+
+    const result = await importState(JSON.stringify(baseFile()));
+
+    expect(result.ok).toBe(true);
+    expect(await getStorageValue(STORAGE_KEYS.GRID_CAPACITY)).toEqual({
+      cols: 9,
+      rows: 5,
+    });
+  });
+});
+
 describe("importState — the replaced tree's stored data does not survive", () => {
   /** A file placing one bookmark (with icon + tooltip setting) under the bar. */
   function fileWithOneBookmark() {

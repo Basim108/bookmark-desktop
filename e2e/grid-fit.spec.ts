@@ -30,12 +30,11 @@ async function seedBookmarks(page: Page, count: number): Promise<string[]> {
  * these tests need, since the right-most column and bottom row must actually
  * hold icons for "is it clipped?" to mean anything.
  *
- * Deliberately asserts the rendered grid rather than waiting for all seeded
- * bookmarks to have stored positions: the background SW's per-item placement
- * races the newtab page's own whole-map backfill write, so an occasional
- * bookmark lands without a position. That race predates this change and is
- * unrelated to grid fit; seeding well past capacity makes these tests immune
- * to it.
+ * Asserts the rendered grid rather than waiting for every seeded bookmark to
+ * have a stored position. Both are sound now that positions.ts serializes
+ * cross-context writes under one lock, but the rendered check is cheaper and
+ * is what these tests actually care about. Seeding well past capacity keeps
+ * them independent of exactly how many bookmarks were created.
  */
 async function waitForFullPage(page: Page): Promise<void> {
   await expect
@@ -117,6 +116,64 @@ async function openNewTab(page: Page, extensionId: string) {
   await page.goto(`chrome-extension://${extensionId}/src/newtab/index.html`);
 }
 
+interface PageOccupancy {
+  cells: number;
+  occupied: number;
+  cols: number;
+  rows: number;
+}
+
+/** Cell counts and the rendered track counts of the visible page. */
+async function measureOccupancy(page: Page): Promise<PageOccupancy> {
+  return page.evaluate(() => {
+    const grid = Array.from(document.querySelectorAll(".canvas-grid")).find(
+      (candidate) => (candidate as HTMLElement).style.display !== "none",
+    );
+    if (!grid) throw new Error("no visible canvas grid");
+    const style = (grid as HTMLElement).style;
+    return {
+      cells: grid.querySelectorAll(".grid-cell").length,
+      occupied: grid.querySelectorAll(".grid-cell--occupied").length,
+      cols: Number(/repeat\((\d+),/.exec(style.gridTemplateColumns)?.[1] ?? 0),
+      rows: Number(/repeat\((\d+),/.exec(style.gridTemplateRows)?.[1] ?? 0),
+    };
+  });
+}
+
+/**
+ * The regression test for this change. The service worker used to place every
+ * new bookmark against a hardcoded 6x4, so page 0 could never hold more than
+ * 24 icons however large the canvas was — item 24 was stored on page 1 while
+ * page 0 still had empty cells, and paginate() never compacts forward.
+ *
+ * This was impossible to write before: the suite had to keep viewports small
+ * enough that capacity stayed under 24 cells.
+ */
+test("fills page one to the measured capacity, past the old 24-cell ceiling", async ({
+  context,
+  extensionId,
+}) => {
+  const page = await context.newPage();
+  await page.setViewportSize({ width: 1900, height: 1000 });
+  // Open the tab first so a capacity is measured and published before any
+  // bookmark exists — this is the ordering that makes the SW's placement use
+  // the real grid.
+  await openNewTab(page, extensionId);
+
+  // Comfortably more than this viewport's capacity, so page 0 fills whatever
+  // the tier arithmetic resolves to. (Capacity can't be read before seeding —
+  // no grid renders until the folder has bookmarks.)
+  await seedBookmarks(page, 70);
+  await waitForFullPage(page);
+
+  const filled = await measureOccupancy(page);
+  expect(
+    filled.cols * filled.rows,
+    "viewport must exceed the old 6x4 ceiling for this test to mean anything",
+  ).toBeGreaterThan(24);
+  expect(filled.occupied).toBe(filled.cols * filled.rows);
+});
+
 test("renders every icon fully inside the canvas when the grid is full", async ({
   context,
   extensionId,
@@ -140,11 +197,10 @@ test("keeps every icon inside the canvas as the sidebar is widened past a column
 }) => {
   const page = await context.newPage();
   // Wide enough that a 220px sidebar drag stays inside the 166px tier, so the
-  // column count moves monotonically (tier crossing is covered separately),
-  // and short enough that a page's capacity stays under the 24 cells the SW
-  // seeds per page — paginate() honours stored pages and never compacts
-  // forward, so a taller viewport could never fill page 0.
-  await page.setViewportSize({ width: 1500, height: 700 });
+  // column count moves monotonically (tier crossing is covered separately).
+  // The height no longer has to keep capacity under 24 cells: placement now
+  // uses the capacity the page measured, so page 0 fills at any viewport.
+  await page.setViewportSize({ width: 1500, height: 900 });
   await openNewTab(page, extensionId);
 
   await seedBookmarks(page, 40);

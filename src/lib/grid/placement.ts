@@ -1,9 +1,18 @@
 import type { GridCapacity, GridCell } from "./types";
 
 /**
- * Default capacity used until Group 4 wires in per-folder resolved grid
- * settings (auto/fixed mode + inheritance chain). See design.md open
- * questions.
+ * Bootstrap capacity, used only until a new-tab page has measured a real one.
+ *
+ * The real source is the measurement a new-tab page persists — see
+ * storage/gridCapacity.ts. This constant covers the window before any page has
+ * rendered: on a fresh profile the service worker can be asked to place a
+ * bookmark (Chrome's star button, or one arriving via sync) with no
+ * measurement on record yet.
+ *
+ * It is NOT a general default. A placement path that reaches for this constant
+ * when a measurement exists is the bug this value used to cause: the page
+ * renders at its measured capacity, so placing against 6x4 stranded every
+ * bookmark past the 24th on a later page while page 1 still had empty cells.
  */
 export const DEFAULT_GRID_CAPACITY: GridCapacity = { cols: 6, rows: 4 };
 

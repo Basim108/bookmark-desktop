@@ -29,6 +29,14 @@ setting the user configured, so exporting it would carry a stale cursor position
 into any profile the file is imported on. Accordingly, importing a file SHALL
 leave the importing profile's recorded last opened folder untouched.
 
+The exported file SHALL NOT contain the measured grid capacity either, for the
+same class of reason: it is state derived from one machine's window and display
+geometry, not a setting the user configured. Carrying it into another profile
+would make that profile place bookmarks against a capacity its own canvas does
+not have — the exact defect persisting the measurement exists to prevent.
+Accordingly, importing a file SHALL leave the importing profile's recorded
+measured capacity untouched.
+
 #### Scenario: Export produces a single self-contained file
 - **WHEN** the user exports the extension state
 - **THEN** one JSON file is downloaded locally containing the bookmark tree, per-folder and per-bookmark settings, grid positions, all custom icons and global images inlined as base64, and the general settings — with no reference to any external file
@@ -44,6 +52,14 @@ leave the importing profile's recorded last opened folder untouched.
 #### Scenario: Importing does not change the last opened folder
 - **WHEN** the user imports an exported state file
 - **THEN** the profile's recorded last opened folder is left exactly as it was before the import
+
+#### Scenario: The measured grid capacity is not exported
+- **WHEN** the user exports the extension state while a grid capacity is recorded from a new-tab page measurement
+- **THEN** the downloaded file contains no measured-capacity value
+
+#### Scenario: Importing does not change the measured grid capacity
+- **WHEN** the user imports an exported state file
+- **THEN** the profile's recorded measured capacity is left exactly as it was before the import, and subsequent placements use the importing machine's own measurement
 
 ### Requirement: Id-Free, Versioned Export Format
 The exported file SHALL embed each item's state inline within its node in the

@@ -1,5 +1,6 @@
 import { getBookmarksInFolder } from "../bookmarks/read";
 import { withPositionsLock } from "../concurrency/positionsLock";
+import { getMeasuredGridCapacity } from "../storage/gridCapacity";
 import {
   getFolderPositionsUnlocked,
   setFolderPositionsUnlocked,
@@ -22,8 +23,15 @@ import type { FolderPositions } from "../storage/schema";
  */
 export async function backfillFolderPositions(
   folderId: string,
-  capacity: GridCapacity = DEFAULT_GRID_CAPACITY,
+  capacity?: GridCapacity,
 ): Promise<FolderPositions> {
+  // A new-tab page passes the capacity it just measured. Callers that cannot
+  // measure one — the service worker's onImportEnded backfill — omit it and get
+  // the last measurement any page published, falling back to the bootstrap
+  // capacity only when no page has ever rendered. Resolved before the lock:
+  // Web Locks are not reentrant and the critical section should stay short.
+  const resolved =
+    capacity ?? (await getMeasuredGridCapacity()) ?? DEFAULT_GRID_CAPACITY;
   // Read and write inside one lock acquisition. This writes the folder's whole
   // map, so a snapshot taken before the lock could discard placements the
   // background worker committed while this was computing — the bug that left
@@ -44,7 +52,7 @@ export async function backfillFolderPositions(
     const positions: FolderPositions = { ...existing };
     const occupied = Object.values(positions);
     for (const bookmark of unpositioned) {
-      const cell = getNextFreeCell(occupied, capacity);
+      const cell = getNextFreeCell(occupied, resolved);
       positions[bookmark.id] = cell;
       occupied.push(cell);
     }
