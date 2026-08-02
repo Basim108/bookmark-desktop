@@ -225,3 +225,93 @@ test("Import uTab downloads a per-entry report file for skipped entries", async 
   });
   await expect(keeper.locator(".bookmark-icon-label")).toHaveText("Keeper");
 });
+
+test("Import uTab from a root folder row confirms the target, then imports into it", async ({
+  context,
+  extensionId,
+}) => {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/${NEWTAB}`);
+
+  const bookmarksBarRow = page.locator(".folder-row", {
+    has: page.getByRole("button", { name: "Bookmarks bar", exact: true }),
+  });
+
+  // Root rows have no gear, so before this entry point existed there was no
+  // way to import here at all.
+  await expect(
+    bookmarksBarRow.getByRole("button", { name: "Folder settings" }),
+  ).toHaveCount(0);
+
+  await bookmarksBarRow
+    .getByRole("button", { name: "Import uTab Bookmarks" })
+    .click();
+
+  // The confirmation names the destination, and must not be the settings window.
+  const confirm = page.getByRole("dialog", { name: "Import uTab Bookmarks" });
+  await expect(confirm).toBeVisible();
+  await expect(confirm.getByText("Bookmarks bar")).toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: "Folder Settings" }),
+  ).toHaveCount(0);
+
+  await confirm.getByRole("button", { name: "Choose file…" }).click();
+  await page
+    .getByLabel("Import uTab bookmarks file")
+    .setInputFiles(UTAB_JSON_PATH);
+
+  // The result arrives in the toast and stays until acknowledged.
+  const toast = page.getByRole("status", { name: "Import status" });
+  await expect(toast).toContainText("Imported 1 folder, 2 bookmarks.");
+
+  const structure = await page.evaluate(async () => {
+    const children = await chrome.bookmarks.getChildren("1");
+    const imported = children.find((n) => n.title === "Imported Folder");
+    const bookmarks = await chrome.bookmarks.getChildren(imported!.id);
+    return bookmarks.map((b) => ({ title: b.title, url: b.url }));
+  });
+  expect(structure).toEqual([
+    { title: "Imported Alpha", url: "https://example.com/imported-alpha" },
+    { title: "Imported Beta", url: "https://example.com/imported-beta" },
+  ]);
+
+  // Selecting another folder must not take the result away.
+  await page
+    .getByRole("button", { name: "Other bookmarks", exact: true })
+    .click();
+  await expect(toast).toBeVisible();
+
+  await toast.getByRole("button", { name: "OK" }).click();
+  await expect(toast).toHaveCount(0);
+});
+
+test("Cancelling the root import confirmation creates nothing", async ({
+  context,
+  extensionId,
+}) => {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/${NEWTAB}`);
+
+  const before = await page.evaluate(() =>
+    chrome.bookmarks.getChildren("1").then((c) => c.length),
+  );
+
+  await page
+    .locator(".folder-row", {
+      has: page.getByRole("button", { name: "Bookmarks bar", exact: true }),
+    })
+    .getByRole("button", { name: "Import uTab Bookmarks" })
+    .click();
+
+  const confirm = page.getByRole("dialog", { name: "Import uTab Bookmarks" });
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+  await expect(confirm).toHaveCount(0);
+
+  await expect(page.getByRole("status", { name: "Import status" })).toHaveCount(
+    0,
+  );
+  const after = await page.evaluate(() =>
+    chrome.bookmarks.getChildren("1").then((c) => c.length),
+  );
+  expect(after).toBe(before);
+});

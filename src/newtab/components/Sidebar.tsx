@@ -1,7 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 import { FolderTreeNode } from "./FolderTreeNode";
 import type { OpenFolderWindow } from "./FolderTreeNode";
+import { ImportConfirmWindow } from "./ImportConfirmWindow";
+import { ImportToast } from "./ImportToast";
 import { useSidebarResize } from "../hooks/useSidebarResize";
+import { useRootFolderImport } from "../hooks/useRootFolderImport";
 
 /** Nothing expanded — the shape used until a restored folder seeds the tree. */
 const NO_EXPANDED_FOLDERS: readonly string[] = [];
@@ -34,6 +38,15 @@ export function Sidebar({
   initialExpandedIds = NO_EXPANDED_FOLDERS,
 }: SidebarProps) {
   const { width, isDragging, startDrag } = useSidebarResize(viewportWidth);
+  // Root-folder import lives here, not in a row: one import at a time must hold
+  // across every root, and the toast has to outlive a row re-render — live
+  // bookmark sync refetches the tree constantly while an import creates items.
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
+  const openImportFilePicker = useCallback(
+    () => importFileInputRef.current?.click(),
+    [],
+  );
+  const importFlow = useRootFolderImport(openImportFilePicker);
   // Exactly one folder window is open at a time across the whole sidebar —
   // either an existing folder's settings or a new-folder draft under a parent.
   const [openWindow, setOpenWindow] = useState<OpenFolderWindow | undefined>(
@@ -70,6 +83,48 @@ export function Sidebar({
     });
   }
 
+  function handleImportFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    // Reset before awaiting so re-picking the same file fires change again.
+    event.target.value = "";
+    if (file) void importFlow.onFileChosen(file);
+  }
+
+  /**
+   * Rendered outside the `loading` early-return below as well as the main tree,
+   * so an import in flight keeps its toast even if the folder tree drops back
+   * into its loading state — which it can, since importing churns the very
+   * bookmark structure the tree is reading.
+   */
+  const importSurfaces = (
+    <>
+      <input
+        ref={importFileInputRef}
+        type="file"
+        accept=".json,application/json"
+        aria-label="Import uTab bookmarks file"
+        className="folder-settings-window-upload-input"
+        onChange={handleImportFileChange}
+      />
+      {importFlow.state.kind === "confirming" && (
+        <ImportConfirmWindow
+          folder={importFlow.state.folder}
+          onCancel={importFlow.cancelConfirm}
+          onChooseFile={importFlow.confirmAndPickFile}
+        />
+      )}
+      {importFlow.state.kind === "running" && (
+        <ImportToast progress={importFlow.state.progress} />
+      )}
+      {importFlow.state.kind === "done" && (
+        <ImportToast
+          message={importFlow.state.message}
+          onDismiss={importFlow.dismissResult}
+        />
+      )}
+    </>
+  );
+
   const resizeHandle = (
     <div
       className="sidebar-resize-handle"
@@ -104,6 +159,7 @@ export function Sidebar({
           <p className="sidebar-loading">Loading folders…</p>
         </div>
         {resizeHandle}
+        {importSurfaces}
       </nav>
     );
   }
@@ -128,11 +184,14 @@ export function Sidebar({
               onSetOpenWindow={setOpenWindow}
               expandedIds={expandedIds}
               onSetExpanded={setExpanded}
+              onRequestImport={importFlow.requestImport}
+              importBusy={importFlow.busy}
             />
           ))}
         </ul>
       </div>
       {resizeHandle}
+      {importSurfaces}
     </nav>
   );
 }

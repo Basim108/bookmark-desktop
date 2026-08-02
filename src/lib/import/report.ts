@@ -1,5 +1,6 @@
 import { toCsv } from "./csv";
 import type { SkipReason } from "../transfer/types";
+import type { UtabImportSummary } from "./utab";
 
 /**
  * What a report row records about an entry:
@@ -57,4 +58,35 @@ export function formatImportReport(rows: readonly ImportReportRow[]): string {
       row.error,
     ]),
   );
+}
+
+function pluralize(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * Human-readable summary of an import, e.g.
+ * "Imported 2 folders, 24 bookmarks — skipped 1. Details in utab-report.log."
+ *
+ * The skip count comes from the summary, not from the row count: an import can
+ * record icon warnings with zero skips and still produce a report.
+ *
+ * Shared by both import entry points — the control inside a folder's settings
+ * window and the root-folder row button. Kept here rather than in either
+ * component so the two can never word the same outcome differently.
+ */
+export function formatImportSummary(
+  summary: UtabImportSummary,
+  rows: readonly ImportReportRow[],
+  reportName?: string,
+): string {
+  const base = `Imported ${pluralize(summary.foldersCreated, "folder")}, ${pluralize(
+    summary.bookmarksCreated,
+    "bookmark",
+  )}`;
+  const failed = rows.some((row) => row.status === "fatal");
+  const head = failed ? `${base} before the import failed` : base;
+  const counted =
+    summary.skipped > 0 ? `${head} — skipped ${summary.skipped}.` : `${head}.`;
+  return reportName ? `${counted} Details in ${reportName}.` : counted;
 }

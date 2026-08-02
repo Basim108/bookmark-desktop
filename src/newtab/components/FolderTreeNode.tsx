@@ -28,6 +28,10 @@ interface FolderTreeNodeProps {
   expandedIds: Set<string>;
   /** Expands (true) or collapses (false) one folder. Takes an explicit target state rather than toggling, so callers that must *ensure* a row is open — revealing a newly created subfolder — cannot accidentally close an already-open one. */
   onSetExpanded: (folderId: string, expanded: boolean) => void;
+  /** Starts the root-folder import flow. Root rows only; the flow itself is owned by Sidebar so one import at a time can be enforced across every root. */
+  onRequestImport: (folder: chrome.bookmarks.BookmarkTreeNode) => void;
+  /** True while any import is in flight, which disables the import button on every root row. */
+  importBusy: boolean;
 }
 
 export function FolderTreeNode({
@@ -39,6 +43,8 @@ export function FolderTreeNode({
   onSetOpenWindow,
   expandedIds,
   onSetExpanded,
+  onRequestImport,
+  importBusy,
 }: FolderTreeNodeProps) {
   const expanded = expandedIds.has(folder.id);
   // Chrome's protected top-level folders (Bookmarks Bar, Other Bookmarks,
@@ -130,6 +136,24 @@ export function FolderTreeNode({
           <span className="folder-label">{folder.title}</span>
         </button>
 
+        {/* Root rows only — the inverse of the gear's gate below. Roots cannot
+            be edited (Chrome refuses bookmarks.update on them), but importing
+            only creates children inside one, so it is a valid operation the
+            gear's absence was incidentally blocking. Placed before the
+            add-subfolder button, per the requested [import] [+] order. */}
+        {isRoot && (
+          <button
+            type="button"
+            className="folder-import-utab"
+            aria-label="Import uTab Bookmarks"
+            title="Import uTab Bookmarks"
+            disabled={importBusy}
+            onClick={() => onRequestImport(folder)}
+          >
+            ⭳
+          </button>
+        )}
+
         <button
           type="button"
           className={`folder-add-subfolder${draftOpen ? " folder-add-subfolder--open" : ""}`}
@@ -198,6 +222,8 @@ export function FolderTreeNode({
               onSetOpenWindow={onSetOpenWindow}
               expandedIds={expandedIds}
               onSetExpanded={onSetExpanded}
+              onRequestImport={onRequestImport}
+              importBusy={importBusy}
             />
           ))}
         </ul>

@@ -6,42 +6,16 @@ import { removeFolder, updateFolderTitle } from "../../lib/bookmarks/edit";
 import { ICON_ERROR_MESSAGES } from "../../lib/icons/errorMessages";
 import { validateIconFile } from "../../lib/icons/validation";
 import { importUtabExport } from "../../lib/import/utab";
-import type { UtabImportSummary } from "../../lib/import/utab";
-import { formatImportReport } from "../../lib/import/report";
-import type { ImportReportRow } from "../../lib/import/report";
+import {
+  formatImportReport,
+  formatImportSummary,
+} from "../../lib/import/report";
 import { downloadText, reportFileName } from "../../lib/transfer/download";
 import { setFolderHasCustomIcon } from "../../lib/storage/folderSettings";
 import { DEFAULT_FOLDER_ICON_KEY } from "../../lib/storage/defaultFolderIcon";
 import { deleteIcon, putIcon } from "../../lib/storage/iconDb";
 import type { FolderSettings } from "../../lib/storage/schema";
 import { CustomIconImage } from "./CustomIconImage";
-
-function pluralize(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
-
-/**
- * Human-readable summary of an import, e.g.
- * "Imported 2 folders, 24 bookmarks — skipped 1. Details in utab-report.log."
- *
- * The skip count comes from the summary, not from the row count: an import can
- * record icon warnings with zero skips and still produce a report.
- */
-function formatImportSummary(
-  summary: UtabImportSummary,
-  rows: readonly ImportReportRow[],
-  reportName?: string,
-): string {
-  const base = `Imported ${pluralize(summary.foldersCreated, "folder")}, ${pluralize(
-    summary.bookmarksCreated,
-    "bookmark",
-  )}`;
-  const failed = rows.some((row) => row.status === "fatal");
-  const head = failed ? `${base} before the import failed` : base;
-  const counted =
-    summary.skipped > 0 ? `${head} — skipped ${summary.skipped}.` : `${head}.`;
-  return reportName ? `${counted} Details in ${reportName}.` : counted;
-}
 
 interface FolderSettingsWindowProps {
   /**

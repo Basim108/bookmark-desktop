@@ -46,6 +46,23 @@ export interface UtabImportSummary {
   skipped: number;
 }
 
+/**
+ * Live progress while an import runs. `total` is fixed for the whole import and
+ * counts only entries that will actually be *attempted* — every folder, plus
+ * every bookmark that is not an empty grid slot.
+ *
+ * Empty slots are excluded deliberately. A uTab export's per-folder `bookmarks`
+ * arrays are fixed-size and mostly placeholders (758 of 996 in the measured
+ * real export), and they are skipped at negligible cost. Counting them would
+ * send a progress readout to ~76% within milliseconds and then leave it
+ * apparently frozen for the rest of a multi-second import — misreporting
+ * exactly the phase the user is waiting through.
+ */
+export interface UtabImportProgress {
+  processed: number;
+  total: number;
+}
+
 export type UtabImportError = "invalid-json" | "not-utab";
 
 export type UtabImportResult =
@@ -152,6 +169,38 @@ function isEmptySlot(bookmark: UtabBookmark | undefined): boolean {
 const DEFAULT_FOLDER_NAME = "New Folder";
 
 /**
+ * Reads a folder's `bookmarks` as an array, tolerating a missing or non-array
+ * value. Shared by the counting pre-pass and the creation loop so the two
+ * always iterate the same entries.
+ */
+function bookmarksOf(folder: UtabFolder | undefined): UtabBookmark[] {
+  return (
+    Array.isArray(folder?.bookmarks) ? folder.bookmarks : []
+  ) as UtabBookmark[];
+}
+
+/**
+ * How many entries the import will attempt: every folder, plus every bookmark
+ * that is not an empty grid slot. Runs over the already-parsed object, so it
+ * costs nothing beyond a walk of memory.
+ *
+ * MUST stay in terms of `isEmptySlot` and `bookmarksOf` — the same predicates
+ * the creation loop uses. A second, hand-rolled emptiness test would drift from
+ * the loop's, and the progress readout would then either finish early or never
+ * reach its total.
+ */
+function countAttemptedEntries(folders: UtabFolder[]): number {
+  let total = 0;
+  for (const folder of folders) {
+    total++;
+    for (const bookmark of bookmarksOf(folder)) {
+      if (!isEmptySlot(bookmark)) total++;
+    }
+  }
+  return total;
+}
+
+/**
  * Maps a creation guard's rejection onto the shared report vocabulary.
  *
  * Kept total rather than collapsed to a constant even though `empty-title` is
@@ -180,10 +229,29 @@ function reasonForCreateError(error: BookmarkCreateError): SkipReason {
 export async function importUtabExport(
   targetFolderId: string,
   text: string,
+  onProgress?: (progress: UtabImportProgress) => void,
 ): Promise<UtabImportResult> {
   const parsed = parseUtabExport(text);
   if (!parsed.ok) {
     return parsed;
+  }
+
+  const total = countAttemptedEntries(parsed.folders);
+  let processed = 0;
+  /**
+   * The callback runs inside the try below, so a consumer that throws — a React
+   * state update during an unmounted render, say — would be caught by the fatal
+   * path and abort an otherwise healthy import. Progress reporting must never
+   * be able to do that, so its failures are swallowed.
+   */
+  function reportProgress() {
+    processed++;
+    if (!onProgress) return;
+    try {
+      onProgress({ processed, total });
+    } catch {
+      // Intentionally ignored; see above.
+    }
   }
 
   let foldersCreated = 0;
@@ -197,9 +265,7 @@ export async function importUtabExport(
 
   try {
     for (const folder of parsed.folders) {
-      const bookmarks = (
-        Array.isArray(folder?.bookmarks) ? folder.bookmarks : []
-      ) as UtabBookmark[];
+      const bookmarks = bookmarksOf(folder);
       const exportName = asString(folder?.name).trim();
       const folderName =
         exportName.length > 0 ? exportName : DEFAULT_FOLDER_NAME;
@@ -221,6 +287,7 @@ export async function importUtabExport(
         );
       }
       foldersCreated++;
+      reportProgress();
       const folderIconOk = await attachPreviewIcon(
         folderResult.node.id,
         folder?.preview,
@@ -239,8 +306,11 @@ export async function importUtabExport(
       for (const bookmark of bookmarks) {
         // Must precede the title fallback: a slot has no url, so substituting
         // one would leave the title blank anyway — but the check is what keeps
-        // placeholders out of the loop entirely.
+        // placeholders out of the loop entirely. It also precedes
+        // reportProgress, so slots stay out of the numerator exactly as
+        // countAttemptedEntries keeps them out of the denominator.
         if (isEmptySlot(bookmark)) continue;
+        reportProgress();
         const title = asString(bookmark?.title);
         const url = asString(bookmark?.url);
         // uTab stores no title for some entries. The url is the only

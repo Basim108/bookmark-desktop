@@ -148,3 +148,86 @@ test("shrinking the browser window live-clamps an over-cap sidebar, and widening
     .poll(async () => (await sidebar.boundingBox())?.width)
     .toBeCloseTo(901, 0);
 });
+
+test("row controls are large enough and separated enough to hit accurately", async ({
+  context,
+  extensionId,
+}) => {
+  // These controls sit adjacent at the row's right edge, so an undersized or
+  // touching target means pressing the wrong action. 24px is the WCAG 2.2
+  // minimum pointer target; the glyph inside stays at the 16px the
+  // folder-sidebar spec pins for the gear.
+  const page = await context.newPage();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`chrome-extension://${extensionId}/src/newtab/index.html`);
+  await page.waitForSelector(".folder-row");
+
+  const measured = await page.evaluate(() => {
+    const row = document.querySelector(".folder-row") as HTMLElement;
+    const importButton = row.querySelector(
+      ".folder-import-utab",
+    ) as HTMLElement;
+    const addButton = row.querySelector(".folder-add-subfolder") as HTMLElement;
+    const importRect = importButton.getBoundingClientRect();
+    const addRect = addButton.getBoundingClientRect();
+    return {
+      importWidth: importRect.width,
+      importHeight: importRect.height,
+      addWidth: addRect.width,
+      addHeight: addRect.height,
+      gap: addRect.left - importRect.right,
+      glyphFontSize: getComputedStyle(importButton).fontSize,
+    };
+  });
+
+  expect(measured.importWidth).toBeGreaterThanOrEqual(24);
+  expect(measured.importHeight).toBeGreaterThanOrEqual(24);
+  expect(measured.addWidth).toBeGreaterThanOrEqual(24);
+  expect(measured.addHeight).toBeGreaterThanOrEqual(24);
+  expect(measured.gap).toBeGreaterThanOrEqual(6);
+  // Growing the hit target must not have grown the glyph.
+  expect(measured.glyphFontSize).toBe("16px");
+});
+
+test("hovering one row control highlights only that control", async ({
+  context,
+  extensionId,
+}) => {
+  const page = await context.newPage();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`chrome-extension://${extensionId}/src/newtab/index.html`);
+  await page.waitForSelector(".folder-row");
+
+  const row = page.locator(".folder-row").first();
+  const importButton = row.getByRole("button", {
+    name: "Import uTab Bookmarks",
+  });
+  const addButton = row.getByRole("button", { name: "Add subfolder" });
+
+  await importButton.hover();
+
+  // Both opacity and background-color are transitioned, so reading computed
+  // style immediately after hover() catches the *starting* values mid-flight.
+  // Poll until the transition settles rather than asserting on a frame.
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const row = document.querySelector(".folder-row") as HTMLElement;
+        const importButton = row.querySelector(
+          ".folder-import-utab",
+        ) as HTMLElement;
+        return getComputedStyle(importButton).backgroundColor;
+      }),
+    )
+    .not.toBe("rgba(0, 0, 0, 0)");
+
+  // Its neighbour stays transparent — that contrast is what tells the user
+  // which of two adjacent buttons is about to be pressed.
+  const neighbourBackground = await page.evaluate(() => {
+    const row = document.querySelector(".folder-row") as HTMLElement;
+    const addButton = row.querySelector(".folder-add-subfolder") as HTMLElement;
+    return getComputedStyle(addButton).backgroundColor;
+  });
+  expect(neighbourBackground).toBe("rgba(0, 0, 0, 0)");
+  await expect(addButton).toBeVisible();
+});
