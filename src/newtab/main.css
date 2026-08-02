@@ -348,6 +348,14 @@ body {
   width: 16px;
   height: 16px;
   padding: 4px;
+  /* Separates adjacent controls. Two 24px targets that touch have an invisible
+     boundary between them and the wrong action gets pressed, so the gap is what
+     makes them read as separate buttons.
+
+     Declared here rather than in a second rule sharing this selector list: a
+     duplicated selector block is what any "merge duplicate rules" cleanup
+     removes first, and losing it silently reverts the fix. */
+  margin-right: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -366,6 +374,14 @@ body {
   transition:
     opacity 0.12s ease,
     background-color 0.12s ease;
+}
+
+/* Whichever control is last in the row must not add to the row's own 3px right
+   padding — the gear on a non-root row, the add-subfolder button on a root. */
+.folder-settings-toggle:last-child,
+.folder-add-subfolder:last-child,
+.folder-import-utab:last-child {
+  margin-right: 0;
 }
 
 /* Hovering one control highlights just that control, on top of the row-wide
