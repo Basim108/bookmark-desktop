@@ -78,6 +78,8 @@ function Harness({
             onSelectFolder={onSelectFolder}
             depth={depth}
             openWindow={openWindow}
+            onRequestImport={vi.fn()}
+            importBusy={false}
             onSetOpenWindow={setOpenWindow}
             expandedIds={expandedIds}
             onSetExpanded={setExpanded}
@@ -220,6 +222,8 @@ describe("FolderTreeNode", () => {
               onSetOpenWindow={vi.fn()}
               expandedIds={new Set<string>()}
               onSetExpanded={vi.fn()}
+              onRequestImport={vi.fn()}
+              importBusy={false}
             />
           </ul>
         </DndTestProvider>,

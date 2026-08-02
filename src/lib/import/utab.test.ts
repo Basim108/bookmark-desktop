@@ -622,3 +622,74 @@ describe("importUtabExport — no de-duplication", () => {
     expect(subfolders[0]!.id).not.toBe(subfolders[1]!.id);
   });
 });
+
+describe("importUtabExport — progress reporting", () => {
+  /** Two folders: 3 real bookmarks and 4 empty slots between them. */
+  function mixedExport(): string {
+    return JSON.stringify({
+      folders: [
+        {
+          name: "One",
+          bookmarks: [
+            { title: "A", url: "https://a.example" },
+            {},
+            { _id: "s", url: "   " },
+            { title: "B", url: "https://b.example" },
+          ],
+        },
+        {
+          name: "Two",
+          bookmarks: [{}, { title: "C", url: "https://c.example" }, {}],
+        },
+      ],
+    });
+  }
+
+  it("counts only entries it will attempt, excluding empty slots", async () => {
+    const seen: { processed: number; total: number }[] = [];
+
+    await importUtabExport("1", mixedExport(), (p) => seen.push({ ...p }));
+
+    // 2 folders + 3 real bookmarks = 5. The 4 empty slots are not entries and
+    // must not inflate the denominator, or the readout would stall at 5/9.
+    expect(seen.every((p) => p.total === 5)).toBe(true);
+    expect(seen).toHaveLength(5);
+  });
+
+  it("advances monotonically and ends exactly on the total", async () => {
+    const seen: number[] = [];
+
+    await importUtabExport("1", mixedExport(), (p) => seen.push(p.processed));
+
+    expect(seen).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("behaves identically when no callback is given", async () => {
+    const withCallback = await importUtabExport("1", mixedExport(), () => {});
+    mock.reset();
+    stubImageBitmap();
+    const without = await importUtabExport("1", mixedExport());
+
+    expect(without.ok && without.summary).toEqual(
+      withCallback.ok && withCallback.summary,
+    );
+    expect(without.ok && without.rows).toEqual(
+      withCallback.ok && withCallback.rows,
+    );
+  });
+
+  it("does not let a throwing callback abort the import", async () => {
+    // The callback runs inside the importer's try, so an unguarded throw would
+    // be caught by the fatal path and end a perfectly healthy import.
+    const result = await importUtabExport("1", mixedExport(), () => {
+      throw new Error("consumer blew up");
+    });
+
+    expect(result.ok && result.summary).toEqual({
+      foldersCreated: 2,
+      bookmarksCreated: 3,
+      skipped: 0,
+    });
+    expect(result.ok && result.rows).toEqual([]);
+  });
+});
