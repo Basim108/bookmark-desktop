@@ -13,18 +13,21 @@ the first focus management in the codebase and sets the pattern for it.
 
 - Opening the folder settings window (edit or create mode) or the Edit Bookmark
   window SHALL move keyboard focus to the `Name` field.
-- Where the field is pre-filled, its contents SHALL be **selected**, so the
-  first keystroke replaces the name rather than appending to it. This is the
-  rename idiom already established by Finder and Windows Explorer, and these
-  windows are opened to change a name far more often than to extend one.
+- The field's contents SHALL **not** be selected. Focus alone leaves the caret
+  after the existing text, so the first keystroke extends the name rather than
+  wiping it.
 
-  Pre-filled in every case except the New Folder draft:
+  Selecting was tried first, on the reasoning that Finder and Explorer select a
+  filename on rename. In use it felt wrong: a selected name is one keystroke
+  from being gone, and these windows are opened to adjust a name at least as
+  often as to replace it outright. Focus removes the click; selection would have
+  made the destructive outcome the default.
 
   | window | initial value | on open |
   | --- | --- | --- |
-  | Folder settings (edit) | `folder.title` | focused, text selected |
-  | New Folder draft | `""` | focused, nothing to select |
-  | Edit Bookmark | `bookmark.title` | focused, text selected |
+  | Folder settings (edit) | `folder.title` | focused, caret after the text |
+  | New Folder draft | `""` | focused, empty |
+  | Edit Bookmark | `bookmark.title` | focused, caret after the text |
 
 ### Not doing
 
@@ -47,11 +50,16 @@ None.
 
 ### Modified Capabilities
 
-- `folder-sidebar`: **Folder Sidebar Row Presentation** — which specifies the
-  folder settings window's contents and behaviour — gains focus-on-open for its
-  Name field.
-- `bookmark-editor`: **Bookmark Name Editing** gains the same for the Edit
-  Bookmark window.
+Both capabilities gain a new requirement rather than having an existing one
+rewritten. Focus-on-open is a new concern layered onto these windows, not a
+change to the behaviour their current requirements describe — and those
+requirements (`Folder Sidebar Row Presentation` runs to some 70 lines) would
+have to be reproduced in full to be modified, obscuring a small change inside a
+large diff.
+
+- `folder-sidebar`: ADDED **Folder Settings Window Focuses Its Name Field**,
+  covering both the edit and New Folder draft modes.
+- `bookmark-editor`: ADDED **Edit Bookmark Window Focuses Its Name Field**.
 
 ## Impact
 

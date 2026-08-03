@@ -222,3 +222,51 @@ describe("EditBookmarkWindow", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 });
+
+describe("EditBookmarkWindow — focus on open", () => {
+  it("focuses the Name field", () => {
+    renderWindow({ bookmark: node("bf1") });
+    expect(screen.getByLabelText("Name")).toHaveFocus();
+  });
+
+  it("does not select the existing name, so typing extends it", async () => {
+    const user = userEvent.setup();
+    renderWindow({ bookmark: node("bf2") });
+
+    // Asserts the outcome, not the selection range: a selection assertion alone
+    // would still pass if the field were unselected but never focused.
+    await user.keyboard("!");
+
+    expect(screen.getByLabelText("Name")).toHaveValue("Bookmark bf2!");
+  });
+
+  it("leaves the existing name unselected, with the caret after it", () => {
+    renderWindow({ bookmark: node("bf5") });
+
+    const nameField = screen.getByLabelText<HTMLInputElement>("Name");
+    expect(nameField).toHaveFocus();
+    expect(nameField.selectionStart).toBe(nameField.selectionEnd);
+    expect(nameField.selectionStart).toBe("Bookmark bf5".length);
+  });
+
+  it("leaves the URL field unfocused and unchanged", async () => {
+    renderWindow({ bookmark: node("bf3", "https://example.com/keep") });
+
+    const url = screen.getByLabelText("URL");
+    expect(url).not.toHaveFocus();
+    expect(url).toHaveValue("https://example.com/keep");
+  });
+
+  it("does not re-assert focus on a later render", async () => {
+    const user = userEvent.setup();
+    renderWindow({ bookmark: node("bf4") });
+
+    // Move focus, then cause a re-render by editing another field. A focus
+    // effect with the wrong dependencies would snap the caret back to Name.
+    const url = screen.getByLabelText("URL");
+    await user.click(url);
+    await user.type(url, "/extra");
+
+    expect(url).toHaveFocus();
+  });
+});
