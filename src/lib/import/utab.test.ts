@@ -4,6 +4,7 @@ import { getBookmarksInFolder, getSubfolders } from "../bookmarks/read";
 import { getBookmarkSettings } from "../storage/bookmarkSettings";
 import { getFolderSettings } from "../storage/folderSettings";
 import { getIcon } from "../storage/iconDb";
+import { MAX_ICON_FILE_SIZE_BYTES } from "../icons/validation";
 import { importUtabExport } from "./utab";
 
 const mock = installChromeMock();
@@ -412,9 +413,17 @@ describe("importUtabExport — icon fallback", () => {
     });
     // The folder's remote-url preview and the bookmark's undecodable one were
     // both present but unusable, so each is a warning; NoPreview had none.
-    expect(result.ok && result.rows.map((r) => [r.status, r.title])).toEqual([
-      ["warning", "Fallbacks"],
-      ["warning", "BadPreview"],
+    // Each warning now names its cause: the folder's preview is a remote url
+    // (not a data url at all) and the bookmark's has an undecodable payload —
+    // two shapes of the same failure, deliberately sharing one name.
+    expect(
+      result.ok && result.rows.map((r) => [r.status, r.title, r.error]),
+    ).toEqual([
+      // The folder's preview is a remote url — not a data url, so it never
+      // decodes. The bookmark's "zzzz" IS valid base64; it decodes to three
+      // bytes and is rejected by the format sniff instead.
+      ["warning", "Fallbacks", "undecodable-preview"],
+      ["warning", "BadPreview", "unsupported-format"],
     ]);
 
     const subfolder = (await getSubfolders("1"))[0]!;
@@ -533,6 +542,9 @@ describe("importUtabExport — report rows", () => {
         folder: "Icons",
         title: "BadPreview",
         url: "https://b.example",
+        // "zzzz" is valid base64 and decodes to three bytes; it is the format
+        // sniff that rejects it, not the decode.
+        error: "unsupported-format",
         reason: "icon-failed",
       },
     ]);
@@ -691,5 +703,130 @@ describe("importUtabExport — progress reporting", () => {
       skipped: 0,
     });
     expect(result.ok && result.rows).toEqual([]);
+  });
+});
+
+describe("importUtabExport — icon failures name their cause", () => {
+  /**
+   * A data URL of `bytes`, declared as PNG regardless of its actual content.
+   * Built in chunks: spreading a million-element array into fromCharCode
+   * overflows the call stack.
+   */
+  function dataUrl(bytes: number[], mime = "image/png"): string {
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode(...bytes.slice(i, i + 0x8000));
+    }
+    return `data:${mime};base64,${btoa(binary)}`;
+  }
+
+  /** The report row for a single-bookmark export whose preview is `preview`. */
+  async function importOneBookmarkWith(preview: string) {
+    const json = JSON.stringify({
+      folders: [
+        {
+          name: "Icons",
+          bookmarks: [{ title: "Item", url: "https://a.example", preview }],
+        },
+      ],
+    });
+    const result = await importUtabExport("1", json);
+    return result.ok ? result : undefined;
+  }
+
+  it("names a preview that is not a data url at all", async () => {
+    const result = await importOneBookmarkWith("https://remote.example/i.png");
+
+    expect(result?.rows).toEqual([
+      expect.objectContaining({
+        status: "warning",
+        title: "Item",
+        reason: "icon-failed",
+        error: "undecodable-preview",
+      }),
+    ]);
+    // Still imported, just without the icon.
+    expect(result?.summary.bookmarksCreated).toBe(1);
+  });
+
+  it("gives an undecodable base64 payload the same name", async () => {
+    // "@" is outside the base64 alphabet, so atob throws and dataUrlToBlob
+    // returns undefined. (Note "zzzz" would NOT do: it is valid base64 and
+    // decodes, reaching the format sniff instead.)
+    const result = await importOneBookmarkWith("data:image/png;base64,@@@@");
+
+    expect(result?.rows[0]?.error).toBe("undecodable-preview");
+  });
+
+  it("names a decodable preview that is not an accepted image format", async () => {
+    // Decodes fine; the magic-byte sniff rejects it. The declared MIME is a lie,
+    // which is exactly why validation sniffs bytes rather than trusting it.
+    const result = await importOneBookmarkWith(
+      dataUrl([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]),
+    );
+
+    expect(result?.rows[0]?.error).toBe("unsupported-format");
+  });
+
+  it("names a preview that exceeds the icon size cap", async () => {
+    stubImageBitmap();
+    const oversized = [
+      ...PNG_HEADER,
+      ...new Array(MAX_ICON_FILE_SIZE_BYTES).fill(0),
+    ];
+
+    const result = await importOneBookmarkWith(dataUrl(oversized));
+
+    expect(result?.rows[0]?.error).toBe("file-too-large");
+  });
+
+  it("names a folder preview failure the same way", async () => {
+    // A separate call site from the bookmark path; the bookmark tests above
+    // would not cover a regression here.
+    const json = JSON.stringify({
+      folders: [
+        {
+          name: "BadFolderIcon",
+          preview: "data:image/png;base64,@@@@",
+          bookmarks: [],
+        },
+      ],
+    });
+
+    const result = await importUtabExport("1", json);
+
+    expect(result.ok && result.rows).toEqual([
+      expect.objectContaining({
+        status: "warning",
+        title: "BadFolderIcon",
+        reason: "icon-failed",
+        error: "undecodable-preview",
+      }),
+    ]);
+  });
+
+  it("records nothing for an entry with no preview", async () => {
+    const json = JSON.stringify({
+      folders: [
+        {
+          name: "NoIcons",
+          bookmarks: [{ title: "Item", url: "https://a.example" }],
+        },
+      ],
+    });
+
+    const result = await importUtabExport("1", json);
+
+    expect(result.ok && result.rows).toEqual([]);
+  });
+
+  it("records nothing for a preview that works", async () => {
+    stubImageBitmap();
+    const result = await importOneBookmarkWith(pngDataUrl());
+
+    expect(result?.rows).toEqual([]);
+    const subfolder = (await getSubfolders("1"))[0]!;
+    const bookmark = (await getBookmarksInFolder(subfolder.id))[0]!;
+    expect(await getIcon(bookmark.id)).toBeDefined();
   });
 });

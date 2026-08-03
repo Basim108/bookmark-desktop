@@ -1,6 +1,7 @@
 import { createBookmark, createFolder } from "../bookmarks/create";
 import type { BookmarkCreateError } from "../bookmarks/create";
 import { validateIconFile } from "../icons/validation";
+import type { IconValidationError } from "../icons/validation";
 import {
   setBookmarkHasCustomIcon,
   setBookmarkLabelDisplay,
@@ -105,19 +106,42 @@ export function parseUtabExport(
  * warning rather than silently discarded. An absent preview is not a failure:
  * the user simply had no icon for that entry.
  */
+/**
+ * Why a `preview` could not become this item's icon.
+ *
+ * The two validation values come from `IconValidationError` rather than being
+ * restated, so a validation error added there surfaces in the report on its own
+ * and one removed there fails to typecheck here.
+ *
+ * `undecodable-preview` covers both shapes of decode failure — a string that is
+ * not a base64 data URL at all, and one whose payload does not decode.
+ * `dataUrlToBlob` returns undefined for both and documents them as one
+ * category; separating them would mean widening its return type to serve a
+ * distinction the report does not need.
+ */
+type PreviewIconError = IconValidationError | "undecodable-preview";
+
+type PreviewIconOutcome = { ok: true } | { ok: false; error: PreviewIconError };
+
 async function attachPreviewIcon(
   itemId: string,
   preview: unknown,
   setHasCustomIcon: (id: string, value: boolean) => Promise<void>,
-): Promise<boolean> {
-  if (typeof preview !== "string" || preview.length === 0) return true;
+): Promise<PreviewIconOutcome> {
+  // An absent preview is not a failure: the item simply keeps its default icon
+  // and nothing is reported about it.
+  if (typeof preview !== "string" || preview.length === 0) return { ok: true };
   const blob = dataUrlToBlob(preview);
-  if (!blob) return false;
+  if (!blob) return { ok: false, error: "undecodable-preview" };
   const result = await validateIconFile(blob);
-  if (!result.ok) return false;
+  if (!result.ok) return { ok: false, error: result.error };
+  // A putIcon rejection (IndexedDB quota) is deliberately not caught here. It is
+  // not an icon-validation failure and the next item would hit it too, so it
+  // propagates to the fatal path and ends the import rather than degrading this
+  // one entry.
   await putIcon(itemId, blob);
   await setHasCustomIcon(itemId, true);
-  return true;
+  return { ok: true };
 }
 
 function asString(value: unknown): string {
@@ -288,18 +312,19 @@ export async function importUtabExport(
       }
       foldersCreated++;
       reportProgress();
-      const folderIconOk = await attachPreviewIcon(
+      const folderIcon = await attachPreviewIcon(
         folderResult.node.id,
         folder?.preview,
         setFolderHasCustomIcon,
       );
-      if (!folderIconOk) {
+      if (!folderIcon.ok) {
         rows.push({
           status: "warning",
           id: asId(folder?._id),
           folder: folderName,
           title: folderName,
           reason: "icon-failed",
+          error: folderIcon.error,
         });
       }
 
@@ -345,12 +370,12 @@ export async function importUtabExport(
           // Only for substituted titles — a real title keeps the default.
           await setBookmarkLabelDisplay(bookmarkResult.node.id, "tooltip");
         }
-        const iconOk = await attachPreviewIcon(
+        const bookmarkIcon = await attachPreviewIcon(
           bookmarkResult.node.id,
           bookmark?.preview,
           setBookmarkHasCustomIcon,
         );
-        if (!iconOk) {
+        if (!bookmarkIcon.ok) {
           rows.push({
             status: "warning",
             id: asId(bookmark?._id),
@@ -358,6 +383,7 @@ export async function importUtabExport(
             title,
             url,
             reason: "icon-failed",
+            error: bookmarkIcon.error,
           });
         }
       }

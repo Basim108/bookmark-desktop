@@ -5,10 +5,14 @@ export type AcceptedIconFormat = "png" | "jpeg" | "webp" | "avif";
 
 export type IconValidationError = "unsupported-format" | "file-too-large";
 
-export interface IconValidationResult {
-  ok: boolean;
-  error?: IconValidationError;
-}
+/**
+ * A discriminated union rather than `{ ok: boolean; error?: … }`: every failing
+ * path below sets an error, so an optional field claimed a state the code never
+ * produces and forced callers that wanted the reason to handle an impossible
+ * undefined.
+ */
+export type IconValidationResult =
+  { ok: true } | { ok: false; error: IconValidationError };
 
 function bytesMatch(
   bytes: Uint8Array,
