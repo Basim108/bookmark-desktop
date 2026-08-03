@@ -43,6 +43,8 @@ test("Import uTab recreates folders, bookmarks, and icons inside the selected fo
   const dialog = page.getByRole("dialog", { name: "Folder Settings" });
   await expect(dialog).toBeVisible();
 
+  await dialog.getByRole("button", { name: /Import Bookmarks/ }).click();
+  await dialog.getByRole("menuitem", { name: "Import uTab" }).click();
   await dialog
     .getByLabel("Import bookmarks file")
     .setInputFiles(UTAB_JSON_PATH);
@@ -110,6 +112,8 @@ test("Import uTab downloads a per-entry report file for skipped entries", async 
   await expect(dialog).toBeVisible();
 
   const downloadPromise = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: /Import Bookmarks/ }).click();
+  await dialog.getByRole("menuitem", { name: "Import uTab" }).click();
   await dialog
     .getByLabel("Import bookmarks file")
     .setInputFiles(UTAB_SKIPS_PATH);
@@ -226,7 +230,7 @@ test("Import uTab downloads a per-entry report file for skipped entries", async 
   await expect(keeper.locator(".bookmark-icon-label")).toHaveText("Keeper");
 });
 
-test("Import uTab from a root folder row confirms the target, then imports into it", async ({
+test("Import uTab from a root folder row imports straight into it", async ({
   context,
   extensionId,
 }) => {
@@ -247,15 +251,10 @@ test("Import uTab from a root folder row confirms the target, then imports into 
     .getByRole("button", { name: "Import uTab Bookmarks" })
     .click();
 
-  // The confirmation names the destination, and must not be the settings window.
-  const confirm = page.getByRole("dialog", { name: "Import uTab Bookmarks" });
-  await expect(confirm).toBeVisible();
-  await expect(confirm.getByText("Bookmarks bar")).toBeVisible();
-  await expect(
-    page.getByRole("dialog", { name: "Folder Settings" }),
-  ).toHaveCount(0);
+  // No dialog stands between the button and the picker — the OS file dialog is
+  // itself the confirmation.
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  await confirm.getByRole("button", { name: "Choose file…" }).click();
   await page
     .getByLabel("Import uTab bookmarks file")
     .setInputFiles(UTAB_JSON_PATH);
@@ -285,33 +284,50 @@ test("Import uTab from a root folder row confirms the target, then imports into 
   await expect(toast).toHaveCount(0);
 });
 
-test("Cancelling the root import confirmation creates nothing", async ({
+test("Import uTab from a folder's settings window reports inside that window", async ({
   context,
   extensionId,
 }) => {
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/${NEWTAB}`);
-
-  const before = await page.evaluate(() =>
-    chrome.bookmarks.getChildren("1").then((c) => c.length),
-  );
+  await createFolder(page, "Target");
+  await page.reload();
+  await expandBookmarksBar(page);
 
   await page
-    .locator(".folder-row", {
-      has: page.getByRole("button", { name: "Bookmarks bar", exact: true }),
-    })
-    .getByRole("button", { name: "Import uTab Bookmarks" })
+    .locator(".folder-row", { hasText: "Target" })
+    .getByRole("button", { name: "Folder settings" })
     .click();
+  const dialog = page.getByRole("dialog", { name: "Folder Settings" });
+  await expect(dialog).toBeVisible();
 
-  const confirm = page.getByRole("dialog", { name: "Import uTab Bookmarks" });
-  await confirm.getByRole("button", { name: "Cancel" }).click();
-  await expect(confirm).toHaveCount(0);
+  // The menu item is what opens the picker, and it must do so from within its
+  // own click — this is the only place that synchronous-gesture requirement is
+  // observable, since jsdom never opens a real dialog.
+  await dialog.getByRole("button", { name: /Import Bookmarks/ }).click();
+  await dialog.getByRole("menuitem", { name: "Import uTab" }).click();
+  await page.getByLabel("Import bookmarks file").setInputFiles(UTAB_JSON_PATH);
 
+  // Reported in place, and the window is still here afterwards.
+  await expect(
+    dialog.getByText("Imported 1 folder, 2 bookmarks."),
+  ).toBeVisible();
+  await expect(dialog).toBeVisible();
+
+  // No toast is used for a window-started import.
   await expect(page.getByRole("status", { name: "Import status" })).toHaveCount(
     0,
   );
-  const after = await page.evaluate(() =>
-    chrome.bookmarks.getChildren("1").then((c) => c.length),
-  );
-  expect(after).toBe(before);
+
+  const titles = await page.evaluate(async () => {
+    const children = await chrome.bookmarks.getChildren("1");
+    const target = children.find((n) => n.title === "Target")!;
+    const subfolders = await chrome.bookmarks.getChildren(target.id);
+    return subfolders.map((f) => f.title);
+  });
+  expect(titles).toEqual(["Imported Folder"]);
+
+  // Dismissable again now the import has settled.
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
 });

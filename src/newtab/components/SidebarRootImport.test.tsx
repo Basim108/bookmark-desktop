@@ -91,53 +91,9 @@ describe("root folder import button", () => {
     ).toHaveAttribute("title", "Import uTab Bookmarks");
   });
 
-  it("does not open a folder settings window", async () => {
-    // A root must never reach the settings window, whichever fields it would
-    // show — that is the rule this whole entry point had to work around.
-    const user = userEvent.setup();
-    renderSidebar();
-
-    await user.click(
-      screen.getAllByRole("button", { name: "Import uTab Bookmarks" })[0]!,
-    );
-
-    expect(screen.queryByText("Folder Settings")).not.toBeInTheDocument();
-    expect(screen.getByRole("dialog")).toHaveAccessibleName(
-      "Import uTab Bookmarks",
-    );
-  });
-});
-
-describe("import target confirmation", () => {
-  it("names the target root before any file is chosen", async () => {
-    const user = userEvent.setup();
-    renderSidebar();
-
-    await user.click(
-      screen.getAllByRole("button", { name: "Import uTab Bookmarks" })[0]!,
-    );
-
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("Bookmarks bar")).toBeInTheDocument();
-  });
-
-  it("creates nothing when cancelled", async () => {
-    const user = userEvent.setup();
-    renderSidebar();
-
-    await user.click(
-      screen.getAllByRole("button", { name: "Import uTab Bookmarks" })[0]!,
-    );
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(queryToast()).not.toBeInTheDocument();
-    // Nothing was created under the root.
-    const children = await chrome.bookmarks.getChildren("1");
-    expect(children).toHaveLength(0);
-  });
-
-  it("opens the file picker when confirmed", async () => {
+  it("opens the file picker directly, with no dialog in between", async () => {
+    // The confirmation window was built, used, and removed: the OS picker is
+    // itself a modal, cancellable step, so a second one was pure friction.
     const user = userEvent.setup();
     const { container } = renderSidebar();
     const input =
@@ -147,7 +103,6 @@ describe("import target confirmation", () => {
     await user.click(
       screen.getAllByRole("button", { name: "Import uTab Bookmarks" })[0]!,
     );
-    await user.click(screen.getByRole("button", { name: "Choose file…" }));
 
     expect(click).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -162,7 +117,6 @@ describe("import progress and result", () => {
     await user.click(
       screen.getAllByRole("button", { name: "Import uTab Bookmarks" })[0]!,
     );
-    await user.click(screen.getByRole("button", { name: "Choose file…" }));
     const input =
       container.querySelector<HTMLInputElement>('input[type="file"]')!;
     await user.upload(input, file);
@@ -208,7 +162,6 @@ describe("navigate-away guard", () => {
     await user.click(
       screen.getAllByRole("button", { name: "Import uTab Bookmarks" })[0]!,
     );
-    await user.click(screen.getByRole("button", { name: "Choose file…" }));
     await user.upload(
       container.querySelector<HTMLInputElement>('input[type="file"]')!,
       utabFile(),
@@ -240,7 +193,6 @@ describe("navigate-away guard", () => {
     await user.click(
       screen.getAllByRole("button", { name: "Import uTab Bookmarks" })[0]!,
     );
-    await user.click(screen.getByRole("button", { name: "Choose file…" }));
     await user.upload(
       container.querySelector<HTMLInputElement>('input[type="file"]')!,
       utabFile(),
@@ -261,7 +213,6 @@ describe("one import at a time", () => {
     await user.click(
       screen.getAllByRole("button", { name: "Import uTab Bookmarks" })[0]!,
     );
-    await user.click(screen.getByRole("button", { name: "Choose file…" }));
 
     // "picking" already counts as busy: the OS dialog is open and a second
     // import must not be startable behind it.
@@ -270,5 +221,38 @@ describe("one import at a time", () => {
     })) {
       expect(button).toBeDisabled();
     }
+  });
+});
+
+describe("root import toast names its destination", () => {
+  it("says which folder the import is landing in", async () => {
+    // The toast serves the entry point with no window of its own, so nothing
+    // else on screen says where the import is going. This is what let the
+    // confirmation dialog be removed rather than merely deleted.
+    const user = userEvent.setup();
+    const { container } = renderSidebar();
+
+    const text = JSON.stringify({
+      folders: [{ name: "Work", bookmarks: [] }],
+    });
+    const file = new File([text], "u.json", { type: "application/json" });
+    let release!: () => void;
+    const pending = new Promise<string>((resolve) => {
+      release = () => resolve(text);
+    });
+    file.text = () => pending;
+
+    await user.click(
+      screen.getAllByRole("button", { name: "Import uTab Bookmarks" })[0]!,
+    );
+    await user.upload(
+      container.querySelector<HTMLInputElement>('input[type="file"]')!,
+      file,
+    );
+
+    await waitFor(() =>
+      expect(toast()).toHaveTextContent("Importing into Bookmarks bar…"),
+    );
+    release();
   });
 });

@@ -5,6 +5,7 @@ import { useFolderSettings } from "../hooks/useFolderSettings";
 import { DEFAULT_FOLDER_ICON_KEY } from "../../lib/storage/defaultFolderIcon";
 import { CustomIconImage } from "./CustomIconImage";
 import { FolderSettingsWindow } from "./FolderSettingsWindow";
+import type { ImportDestination } from "../hooks/useUtabImport";
 
 /**
  * Which folder window is open across the whole sidebar, if any. Lifted to
@@ -28,8 +29,8 @@ interface FolderTreeNodeProps {
   expandedIds: Set<string>;
   /** Expands (true) or collapses (false) one folder. Takes an explicit target state rather than toggling, so callers that must *ensure* a row is open — revealing a newly created subfolder — cannot accidentally close an already-open one. */
   onSetExpanded: (folderId: string, expanded: boolean) => void;
-  /** Starts the root-folder import flow. Root rows only; the flow itself is owned by Sidebar so one import at a time can be enforced across every root. */
-  onRequestImport: (folder: chrome.bookmarks.BookmarkTreeNode) => void;
+  /** Starts the root rows' import flow. Root rows only; the flow itself is owned by Sidebar so one import at a time can be enforced across every root, and so its toast outlives this row's re-render. */
+  onRequestImport: (destination: ImportDestination) => void;
   /** True while any import is in flight, which disables the import button on every root row. */
   importBusy: boolean;
 }
@@ -148,7 +149,9 @@ export function FolderTreeNode({
             aria-label="Import uTab Bookmarks"
             title="Import uTab Bookmarks"
             disabled={importBusy}
-            onClick={() => onRequestImport(folder)}
+            onClick={() =>
+              onRequestImport({ id: folder.id, title: folder.title })
+            }
           >
             ⭳
           </button>

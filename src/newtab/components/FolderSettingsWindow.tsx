@@ -1,21 +1,17 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import { createFolder } from "../../lib/bookmarks/create";
 import { removeFolder, updateFolderTitle } from "../../lib/bookmarks/edit";
 import { ICON_ERROR_MESSAGES } from "../../lib/icons/errorMessages";
 import { validateIconFile } from "../../lib/icons/validation";
-import { importUtabExport } from "../../lib/import/utab";
-import {
-  formatImportReport,
-  formatImportSummary,
-} from "../../lib/import/report";
-import { downloadText, reportFileName } from "../../lib/transfer/download";
 import { setFolderHasCustomIcon } from "../../lib/storage/folderSettings";
 import { DEFAULT_FOLDER_ICON_KEY } from "../../lib/storage/defaultFolderIcon";
 import { deleteIcon, putIcon } from "../../lib/storage/iconDb";
 import type { FolderSettings } from "../../lib/storage/schema";
 import { CustomIconImage } from "./CustomIconImage";
+import { Spinner } from "./Spinner";
+import { useUtabImport } from "../hooks/useUtabImport";
 
 interface FolderSettingsWindowProps {
   /**
@@ -94,11 +90,16 @@ export function FolderSettingsWindow({
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [saving, setSaving] = useState(false);
   const [importMenuOpen, setImportMenuOpen] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<string | undefined>(
-    undefined,
-  );
   const importFileInputRef = useRef<HTMLInputElement>(null);
+  const openImportFilePicker = useCallback(
+    () => importFileInputRef.current?.click(),
+    [],
+  );
+  // This window reports its own import in place and stays open throughout, so
+  // it runs its own instance of the flow. Only the behaviour is shared with the
+  // root rows' toast — the presentation deliberately is not.
+  const importFlow = useUtabImport(openImportFilePicker);
+  const importing = importFlow.running;
 
   const nameValid = name.trim().length > 0;
   const canSave = nameValid && !saving;
@@ -118,13 +119,28 @@ export function FolderSettingsWindow({
     return () => URL.revokeObjectURL(previewUrl);
   }, [pendingIcon]);
 
+  // A running import must not be dismissed out from under itself. Closing this
+  // window mid-import used to leave the import running with its report still
+  // downloading and its summary set on an unmounted component — a file landing
+  // in Downloads with no explanation and no summary anywhere. That is
+  // pre-publication finding #7, whose prescribed fix was exactly this guard,
+  // already applied in GeneralSettingsWindow.
+  //
+  // All three dismissal routes are gated, not just this one: guarding Escape
+  // alone would leave the close control and the backdrop as two more ways to
+  // reproduce it. Gated on `running`, not `busy`: while the OS picker is open
+  // nothing is running yet, so the window should still close normally.
+  const dismissable = !importing;
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      if (!dismissable) return;
+      onClose();
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, [onClose, dismissable]);
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -153,54 +169,18 @@ export function FolderSettingsWindow({
   // Opening the OS file picker must happen synchronously inside a user-gesture
   // handler, so the menu item triggers the hidden input's click directly.
   function handleImportUtabClick() {
+    if (!folder) return;
     setImportMenuOpen(false);
-    importFileInputRef.current?.click();
+    // startImport opens the picker synchronously inside this click, which is
+    // what makes the OS dialog appear at all.
+    importFlow.startImport({ id: folder.id, title: folder.title });
   }
 
-  async function handleImportFileChange(event: ChangeEvent<HTMLInputElement>) {
+  function handleImportFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
+    // Reset before awaiting so re-picking the same file fires change again.
     event.target.value = "";
-    if (!file || importing || !folder) return;
-    setImporting(true);
-    setImportResult(undefined);
-
-    // Everything below is wrapped: previously a rejection from file.text() or
-    // from the importer escaped as an unhandled promise, so setImporting(false)
-    // never ran and this dialog stayed on "Importing…" forever.
-    try {
-      const text = await file.text();
-      const result = await importUtabExport(folder.id, text);
-
-      if (!result.ok) {
-        // A structurally rejected file created nothing, so there is nothing
-        // per-entry to report — the inline message says all a report could.
-        setImportResult(
-          result.error === "invalid-json"
-            ? "That file isn’t valid JSON."
-            : "That file isn’t a uTab export.",
-        );
-        return;
-      }
-
-      let reportName: string | undefined;
-      if (result.rows.length > 0) {
-        reportName = reportFileName(file.name, "log");
-        downloadText(formatImportReport(result.rows), reportName, "text/csv");
-      }
-      setImportResult(
-        formatImportSummary(result.summary, result.rows, reportName),
-      );
-      // Import creates real bookmarks/folders immediately (not a staged edit),
-      // so refresh the caller without closing the window — the summary stays
-      // visible.
-      onSaved();
-    } catch (error) {
-      setImportResult(
-        `Import failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    } finally {
-      setImporting(false);
-    }
+    if (file) void importFlow.onFileChosen(file);
   }
 
   async function handleSave() {
@@ -290,6 +270,7 @@ export function FolderSettingsWindow({
     <div
       className="folder-settings-window-backdrop"
       onClick={(event) => {
+        if (!dismissable) return;
         if (event.target === event.currentTarget) onClose();
       }}
     >
@@ -307,6 +288,7 @@ export function FolderSettingsWindow({
             type="button"
             className="folder-settings-window-close"
             aria-label="Close"
+            disabled={!dismissable}
             onClick={onClose}
           >
             ✕
@@ -380,7 +362,7 @@ export function FolderSettingsWindow({
                 className="folder-settings-window-import-toggle"
                 aria-haspopup="menu"
                 aria-expanded={importMenuOpen}
-                disabled={importing}
+                disabled={importFlow.busy}
                 onClick={() => setImportMenuOpen((open) => !open)}
               >
                 Import Bookmarks ▾
@@ -405,17 +387,27 @@ export function FolderSettingsWindow({
                 className="folder-settings-window-upload-input"
                 onChange={(event) => void handleImportFileChange(event)}
               />
-              {importing && (
-                <p className="folder-settings-window-hint" role="status">
-                  Importing…
+              {/* Progress and outcome are reported here, in place: this
+                  window stays open for the whole import and afterwards. The
+                  count omits itself until the first progress callback lands so
+                  it never flashes a meaningless "0 / 0". */}
+              {importFlow.state.kind === "running" && (
+                <p
+                  className="folder-settings-window-import-progress"
+                  role="status"
+                >
+                  <Spinner />
+                  {importFlow.state.progress
+                    ? `Importing… ${importFlow.state.progress.processed} / ${importFlow.state.progress.total}`
+                    : "Importing…"}
                 </p>
               )}
-              {!importing && importResult && (
+              {importFlow.state.kind === "done" && (
                 <p
                   className="folder-settings-window-import-result"
                   role="status"
                 >
-                  {importResult}
+                  {importFlow.state.message}
                 </p>
               )}
             </div>
