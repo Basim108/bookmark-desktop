@@ -5,6 +5,13 @@ import type { UtabImportProgress } from "../../lib/import/utab";
 interface ImportToastProps {
   /** Progress while running, or the final message once it has settled. */
   progress?: UtabImportProgress | undefined;
+  /**
+   * Name of the folder being imported into. Shown while running because this
+   * surface serves the entry point that has no window of its own — nothing else
+   * on screen says where the import is landing. A window-started import needs
+   * no such label and does not use this component.
+   */
+  destinationName?: string | undefined;
   message?: string | undefined;
   /** Present only for the result, which waits to be acknowledged. */
   onDismiss?: (() => void) | undefined;
@@ -24,10 +31,12 @@ interface ImportToastProps {
  */
 export function ImportToast({
   progress,
+  destinationName,
   message,
   onDismiss,
 }: ImportToastProps) {
   const done = message !== undefined;
+  const into = destinationName ? ` into ${destinationName}` : "";
 
   return createPortal(
     // Named, because dnd-kit renders its own role="status" live region into the
@@ -56,8 +65,8 @@ export function ImportToast({
           {/* The count is omitted until the first progress callback lands, so
               the toast never flashes a meaningless "0 / 0". */}
           {progress
-            ? `Importing… ${progress.processed} / ${progress.total}`
-            : "Importing…"}
+            ? `Importing${into}… ${progress.processed} / ${progress.total}`
+            : `Importing${into}…`}
         </p>
       )}
     </div>,

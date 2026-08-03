@@ -28,6 +28,33 @@ export function installChromeMock() {
   const bookmarkNodes = new Map<string, chrome.bookmarks.BookmarkTreeNode>();
   let generatedIdCounter = 0;
 
+  /**
+   * Default behaviour of chrome.bookmarks.create, named so reset() can restore
+   * it. Tests that make create fail (quota, rejection) would otherwise leave
+   * every later test in the file with a broken create — mockClear resets call
+   * history, not implementations.
+   */
+  const defaultBookmarksCreate = async (
+    details: chrome.bookmarks.CreateDetails,
+  ): Promise<chrome.bookmarks.BookmarkTreeNode> => {
+    const id = `gen-${++generatedIdCounter}`;
+    const parentId = details.parentId ?? "1";
+    const index = [...bookmarkNodes.values()].filter(
+      (node) => node.parentId === parentId,
+    ).length;
+    const node: chrome.bookmarks.BookmarkTreeNode = {
+      id,
+      parentId,
+      index,
+      title: details.title ?? "",
+      syncing: false,
+      ...(details.url !== undefined ? { url: details.url } : {}),
+    };
+    bookmarkNodes.set(id, node);
+    bookmarksEvents.onCreated.emit(id, node);
+    return node;
+  };
+
   const storageOnChanged =
     createEvent<
       (
@@ -174,28 +201,7 @@ export function installChromeMock() {
     },
     bookmarks: {
       ...bookmarksEvents,
-      create: vi.fn(
-        async (
-          details: chrome.bookmarks.CreateDetails,
-        ): Promise<chrome.bookmarks.BookmarkTreeNode> => {
-          const id = `gen-${++generatedIdCounter}`;
-          const parentId = details.parentId ?? "1";
-          const index = [...bookmarkNodes.values()].filter(
-            (node) => node.parentId === parentId,
-          ).length;
-          const node: chrome.bookmarks.BookmarkTreeNode = {
-            id,
-            parentId,
-            index,
-            title: details.title ?? "",
-            syncing: false,
-            ...(details.url !== undefined ? { url: details.url } : {}),
-          };
-          bookmarkNodes.set(id, node);
-          bookmarksEvents.onCreated.emit(id, node);
-          return node;
-        },
-      ),
+      create: vi.fn(defaultBookmarksCreate),
       getChildren: vi.fn(
         async (id: string): Promise<chrome.bookmarks.BookmarkTreeNode[]> => {
           return [...bookmarkNodes.values()]
@@ -317,6 +323,9 @@ export function installChromeMock() {
       bookmarkNodes.delete(id);
     },
     reset() {
+      // Restore create's default behaviour: a test that made it reject would
+      // otherwise poison every test after it in the same file.
+      chromeMock.bookmarks.create.mockImplementation(defaultBookmarksCreate);
       storage.clear();
       sessionStorage.clear();
       bookmarkNodes.clear();

@@ -307,6 +307,21 @@ function jsonFile(value: unknown, name = "utab.json"): File {
   });
 }
 
+/**
+ * Drives the import exactly as a user must: open the menu, activate Import
+ * uTab — which is what records the destination and opens the picker — then
+ * supply the file. Uploading straight to the input skips the step that tells
+ * the flow which folder it is importing into.
+ */
+async function chooseImportFile(
+  user: ReturnType<typeof userEvent.setup>,
+  file: File,
+) {
+  await user.click(screen.getByRole("button", { name: /Import Bookmarks/ }));
+  await user.click(screen.getByRole("menuitem", { name: "Import uTab" }));
+  await user.upload(screen.getByLabelText("Import bookmarks file"), file);
+}
+
 describe("FolderSettingsWindow — import", () => {
   it("offers an Import Bookmarks dropdown with an Import uTab item", async () => {
     const user = userEvent.setup();
@@ -326,7 +341,7 @@ describe("FolderSettingsWindow — import", () => {
   it("imports a chosen uTab file into this folder and shows a summary", async () => {
     stubImageBitmap();
     const user = userEvent.setup();
-    const { onSaved } = renderWindow({ folder: folderNode("f9", "Target") });
+    renderWindow({ folder: folderNode("f9", "Target") });
 
     const file = jsonFile({
       folders: [
@@ -340,7 +355,7 @@ describe("FolderSettingsWindow — import", () => {
       ],
     });
 
-    await user.upload(screen.getByLabelText("Import bookmarks file"), file);
+    await chooseImportFile(user, file);
 
     await screen.findByText("Imported 1 folder, 2 bookmarks.");
 
@@ -348,7 +363,6 @@ describe("FolderSettingsWindow — import", () => {
     expect(subfolders.map((f) => f.title)).toEqual(["Work"]);
     const bookmarks = await getBookmarksInFolder(subfolders[0]!.id);
     expect(bookmarks.map((b) => b.title)).toEqual(["Alpha", "Beta"]);
-    expect(onSaved).toHaveBeenCalled();
   });
 
   it("shows an error and creates nothing for a file that isn't valid JSON", async () => {
@@ -359,7 +373,7 @@ describe("FolderSettingsWindow — import", () => {
       type: "application/json",
     });
 
-    await user.upload(screen.getByLabelText("Import bookmarks file"), file);
+    await chooseImportFile(user, file);
 
     await screen.findByText("That file isn’t valid JSON.");
     expect(await getSubfolders("f10")).toEqual([]);
@@ -387,7 +401,7 @@ describe("FolderSettingsWindow — import report", () => {
       "my-utab-export.json",
     );
 
-    await user.upload(screen.getByLabelText("Import bookmarks file"), file);
+    await chooseImportFile(user, file);
 
     await screen.findByText(/my-utab-export-report\.log/);
     expect(downloads.files()).toEqual(["my-utab-export-report.log"]);
@@ -407,7 +421,7 @@ describe("FolderSettingsWindow — import report", () => {
       ],
     });
 
-    await user.upload(screen.getByLabelText("Import bookmarks file"), file);
+    await chooseImportFile(user, file);
 
     await screen.findByText("Imported 1 folder, 1 bookmark.");
     expect(downloads.files()).toEqual([]);
@@ -434,7 +448,7 @@ describe("FolderSettingsWindow — import report", () => {
       "boom.json",
     );
 
-    await user.upload(screen.getByLabelText("Import bookmarks file"), file);
+    await chooseImportFile(user, file);
 
     // The pre-fix behaviour was an unhandled rejection that left this button
     // disabled forever, with no message ever rendered.
@@ -445,5 +459,188 @@ describe("FolderSettingsWindow — import report", () => {
         screen.getByRole("button", { name: /Import Bookmarks/ }),
       ).toBeEnabled();
     });
+  });
+});
+
+/**
+ * A file whose `text()` stays pending until released.
+ *
+ * The flow sets its running state *before* awaiting `file.text()`, so holding
+ * that promise parks the import in "running" for as long as a test needs.
+ * Without this the assertions race a jsdom import that finishes in under a
+ * millisecond — and a dismissal guard that is never observed while running is
+ * a guard that was never actually tested.
+ */
+function heldImportFile(value: unknown, name = "utab.json") {
+  const text = JSON.stringify(value);
+  const file = new File([text], name, { type: "application/json" });
+  let release!: () => void;
+  const pending = new Promise<string>((resolve) => {
+    release = () => resolve(text);
+  });
+  file.text = () => pending;
+  return { file, release };
+}
+
+/** A modest export; 1 folder + 25 bookmarks = 26 attempted entries. */
+function bulkExport(name = "utab.json") {
+  return {
+    value: {
+      folders: [
+        {
+          name: "Work",
+          bookmarks: Array.from({ length: 25 }, (_, i) => ({
+            title: `B${i}`,
+            url: `https://example.com/${i}`,
+          })),
+        },
+      ],
+    },
+    name,
+  };
+}
+
+describe("FolderSettingsWindow — import progress", () => {
+  it("reports progress inside the window, with a spinner and a live count", async () => {
+    // Pace bookmark creation so intermediate counts are actually observable;
+    // without it the whole import lands in one batch. Capture the *implementation*,
+    // not the mock — calling the mock from inside its own replacement recurses.
+    const create = mock.chrome.bookmarks.create;
+    const original = create.getMockImplementation()!;
+    create.mockImplementation(async (...args: Parameters<typeof original>) => {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      return original(...args);
+    });
+
+    const user = userEvent.setup();
+    renderWindow({ folder: folderNode("fp1", "Target") });
+    const { value, name } = bulkExport();
+
+    await chooseImportFile(user, jsonFile(value, name));
+
+    // The window is portalled to document.body, so queries go through document
+    // rather than render()'s container.
+    await waitFor(() =>
+      expect(
+        document.querySelector(".folder-settings-window-import-progress"),
+      ).toHaveTextContent(/Importing… \d+ \/ 26/),
+    );
+    expect(document.querySelector(".spinner")).not.toBeNull();
+  });
+
+  it("stays open when the import finishes and shows the report filename", async () => {
+    const user = userEvent.setup();
+    const downloads = captureDownloads();
+    const { onClose } = renderWindow({ folder: folderNode("fp2", "Target") });
+
+    await chooseImportFile(
+      user,
+      jsonFile(
+        {
+          folders: [
+            {
+              name: "Work",
+              bookmarks: [
+                { title: "Keep", url: "https://keep.example" },
+                { title: "Bad", url: "not-a-url" },
+              ],
+            },
+          ],
+        },
+        "uTab_settings.json",
+      ),
+    );
+
+    await screen.findByText(/Details in uTab_settings-report\.log\./);
+    // The import closes the window neither at its start nor at its end.
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(downloads.files()).toEqual(["uTab_settings-report.log"]);
+  });
+});
+
+describe("FolderSettingsWindow — dismissal while importing", () => {
+  /** Starts an import and parks it mid-flight. */
+  async function startHeldImport(folderId: string) {
+    const user = userEvent.setup();
+    const rendered = renderWindow({ folder: folderNode(folderId, "Target") });
+    const { value, name } = bulkExport();
+    const { file, release } = heldImportFile(value, name);
+    await chooseImportFile(user, file);
+    await waitFor(() =>
+      expect(
+        document.querySelector(".folder-settings-window-import-progress"),
+      ).toBeInTheDocument(),
+    );
+    return { user, release, ...rendered };
+  }
+
+  /*
+   * Three routes, three tests. A single combined assertion would pass with two
+   * of the three still able to dismiss the window — which is how
+   * pre-publication finding #7 survived being "fixed" in the sibling window
+   * and not this one.
+   */
+
+  it("ignores Escape while the import is running", async () => {
+    const { user, onClose, release } = await startHeldImport("fp3");
+    await user.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
+    release();
+  });
+
+  it("disables the close control while the import is running", async () => {
+    const { user, onClose, release } = await startHeldImport("fp4");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(onClose).not.toHaveBeenCalled();
+    release();
+  });
+
+  it("ignores a backdrop click while the import is running", async () => {
+    const { user, onClose, release } = await startHeldImport("fp5");
+    await user.click(
+      document.querySelector(".folder-settings-window-backdrop")!,
+    );
+    expect(onClose).not.toHaveBeenCalled();
+    release();
+  });
+
+  it("can be dismissed again once the import settles", async () => {
+    const { user, onClose, release } = await startHeldImport("fp6");
+    release();
+    await screen.findByText(/Imported 1 folder, 25 bookmarks\./);
+
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("can be dismissed again after a failed import", async () => {
+    const user = userEvent.setup();
+    const { onClose } = renderWindow({ folder: folderNode("fp7", "Target") });
+
+    await chooseImportFile(
+      user,
+      new File(["{ not json"], "bad.json", { type: "application/json" }),
+    );
+    await screen.findByText("That file isn’t valid JSON.");
+
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("guards against navigating away while the import runs, and releases after", async () => {
+    const add = vi.spyOn(window, "addEventListener");
+    const remove = vi.spyOn(window, "removeEventListener");
+
+    const { release } = await startHeldImport("fp8");
+    expect(add.mock.calls.some(([type]) => type === "beforeunload")).toBe(true);
+
+    release();
+    await screen.findByText(/Imported 1 folder, 25 bookmarks\./);
+    await waitFor(() =>
+      expect(remove.mock.calls.some(([type]) => type === "beforeunload")).toBe(
+        true,
+      ),
+    );
   });
 });

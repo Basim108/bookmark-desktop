@@ -2,10 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { FolderTreeNode } from "./FolderTreeNode";
 import type { OpenFolderWindow } from "./FolderTreeNode";
-import { ImportConfirmWindow } from "./ImportConfirmWindow";
 import { ImportToast } from "./ImportToast";
 import { useSidebarResize } from "../hooks/useSidebarResize";
-import { useRootFolderImport } from "../hooks/useRootFolderImport";
+import { useUtabImport } from "../hooks/useUtabImport";
 
 /** Nothing expanded — the shape used until a restored folder seeds the tree. */
 const NO_EXPANDED_FOLDERS: readonly string[] = [];
@@ -46,7 +45,11 @@ export function Sidebar({
     () => importFileInputRef.current?.click(),
     [],
   );
-  const importFlow = useRootFolderImport(openImportFilePicker);
+  // The root rows' import lives here, not in a row: one import at a time must
+  // hold across every root, and the toast has to outlive a row re-render — live
+  // bookmark sync refetches the tree constantly while an import creates items.
+  // The folder settings window runs its own instance and reports inside itself.
+  const importFlow = useUtabImport(openImportFilePicker);
   // Exactly one folder window is open at a time across the whole sidebar —
   // either an existing folder's settings or a new-folder draft under a parent.
   const [openWindow, setOpenWindow] = useState<OpenFolderWindow | undefined>(
@@ -106,15 +109,11 @@ export function Sidebar({
         className="folder-settings-window-upload-input"
         onChange={handleImportFileChange}
       />
-      {importFlow.state.kind === "confirming" && (
-        <ImportConfirmWindow
-          folder={importFlow.state.folder}
-          onCancel={importFlow.cancelConfirm}
-          onChooseFile={importFlow.confirmAndPickFile}
-        />
-      )}
       {importFlow.state.kind === "running" && (
-        <ImportToast progress={importFlow.state.progress} />
+        <ImportToast
+          progress={importFlow.state.progress}
+          destinationName={importFlow.state.destination.title}
+        />
       )}
       {importFlow.state.kind === "done" && (
         <ImportToast
@@ -184,7 +183,7 @@ export function Sidebar({
               onSetOpenWindow={setOpenWindow}
               expandedIds={expandedIds}
               onSetExpanded={setExpanded}
-              onRequestImport={importFlow.requestImport}
+              onRequestImport={importFlow.startImport}
               importBusy={importFlow.busy}
             />
           ))}

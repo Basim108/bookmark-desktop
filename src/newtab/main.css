@@ -420,18 +420,16 @@ body {
   cursor: default;
 }
 
-/* Import confirmation: same window chrome as the folder settings modal, but a
-   distinct component — a root folder must never open the settings window. */
-.import-confirm-text {
-  margin: 0 0 8px;
+/* In-window import progress. The settings window reports its own import here
+   and stays open throughout, so this sits inline rather than in the toast. */
+.folder-settings-window-import-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
 }
 
-.import-confirm-target {
-  margin: 0 0 12px;
-  font-weight: 600;
-}
-
-/* Progress/result of a root-folder import. Portalled to the body rather than
+/* Progress/result of a root-row import. Portalled to the body rather than
    nested in the sidebar, which can be dragged down to 40px — a toast clipped to
    that width would be unreadable exactly when it is needed. Sits above the
    modal backdrop (z-index 100) so a result stays visible if a folder window is
