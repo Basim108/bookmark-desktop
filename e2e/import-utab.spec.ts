@@ -171,9 +171,11 @@ test("Import uTab downloads a per-entry report file for skipped entries", async 
   expect(csv).not.toContain("b-slot-blank");
   expect(csv).not.toContain("b-orphan-slot");
 
-  // An unusable preview is a warning, not a skip — the bookmark still exists.
+  // An unusable preview is a warning, not a skip — the bookmark still exists —
+  // and the error column names which of the three preview failures occurred.
+  // This row used to end at "icon-failed," with an empty cell.
   expect(lines).toContain(
-    'warning,b-badicon,"Reading, Writing",Bad Icon,https://example.com/bad-icon,icon-failed,',
+    'warning,b-badicon,"Reading, Writing",Bad Icon,https://example.com/bad-icon,icon-failed,unsupported-format',
   );
 
   // The valid entry produced no row at all.
