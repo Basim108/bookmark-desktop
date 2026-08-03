@@ -72,6 +72,7 @@ export function FolderSettingsWindow({
 }: FolderSettingsWindowProps) {
   const titleId = useId();
   const nameId = useId();
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   // Create (draft) mode when there is no backing folder node. It starts with an
   // empty name (Save stays disabled until non-empty), no custom icon, no import
@@ -110,6 +111,22 @@ export function FolderSettingsWindow({
   const hasCustomIconNow =
     pendingIcon.kind === "upload" ||
     (pendingIcon.kind === "unchanged" && hasCustomIcon);
+
+  // Renaming is the most common reason to open this window, so focus starts in
+  // the Name field — no click needed, and no tabbing past the other controls.
+  //
+  // Focus only: the existing name is deliberately NOT selected. Selecting it
+  // would make the first keystroke wipe the name, which is the wrong default
+  // for a field people open to adjust a name more often than to replace it.
+  // Chromium leaves the caret at the end of the value on programmatic focus,
+  // which is the position a rename wants.
+  //
+  // Mount only, deliberately. This window re-renders continuously while an
+  // import it launched reports progress inline, and an effect that re-fired on
+  // those renders would pull the caret out of the field mid-typing.
+  useEffect(() => {
+    nameInputRef.current?.focus();
+  }, []);
 
   // Revoke the staged upload's object URL when it's replaced or the window
   // unmounts, so a discarded preview never leaks.
@@ -341,6 +358,7 @@ export function FolderSettingsWindow({
             </label>
             <input
               id={nameId}
+              ref={nameInputRef}
               type="text"
               className="folder-settings-window-input"
               value={name}

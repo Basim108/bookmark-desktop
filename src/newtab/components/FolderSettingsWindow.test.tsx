@@ -644,3 +644,71 @@ describe("FolderSettingsWindow — dismissal while importing", () => {
     );
   });
 });
+
+describe("FolderSettingsWindow — focus on open", () => {
+  it("focuses the Name field for an existing folder", () => {
+    renderWindow({ folder: folderNode("ff1", "Work") });
+    expect(screen.getByLabelText("Name")).toHaveFocus();
+  });
+
+  it("does not select the existing name, so typing extends it", async () => {
+    const user = userEvent.setup();
+    renderWindow({ folder: folderNode("ff2", "Work") });
+
+    // Asserts the outcome, not the selection range: a selection assertion alone
+    // would still pass if the field were unselected but never focused.
+    await user.keyboard("shop");
+
+    expect(screen.getByLabelText("Name")).toHaveValue("Workshop");
+  });
+
+  it("leaves the existing name unselected, with the caret after it", () => {
+    renderWindow({ folder: folderNode("ff5", "Work") });
+
+    const nameField = screen.getByLabelText<HTMLInputElement>("Name");
+    expect(nameField).toHaveFocus();
+    // Collapsed selection at the end — nothing highlighted, ready to edit.
+    expect(nameField.selectionStart).toBe(nameField.selectionEnd);
+    expect(nameField.selectionStart).toBe("Work".length);
+  });
+
+  it("focuses the empty Name field of the New Folder draft", async () => {
+    const user = userEvent.setup();
+    renderCreateWindow();
+
+    const nameField = screen.getByLabelText("Name");
+    expect(nameField).toHaveFocus();
+    // Nothing to select; typing simply fills the empty field.
+    await user.keyboard("Fresh");
+    expect(nameField).toHaveValue("Fresh");
+  });
+
+  /**
+   * The regression this window is uniquely exposed to. It re-renders
+   * continuously while an import it launched reports progress inline, so a
+   * focus effect with the wrong dependencies would pull the caret out of the
+   * field the user is actually typing in — and would do it most aggressively
+   * exactly while progress is streaming.
+   */
+  it("does not re-assert focus while the window stays open", async () => {
+    const user = userEvent.setup();
+    renderWindow({ folder: folderNode("ff3", "Work") });
+
+    const importToggle = screen.getByRole("button", {
+      name: /Import Bookmarks/,
+    });
+    await user.click(importToggle);
+
+    expect(screen.getByLabelText("Name")).not.toHaveFocus();
+  });
+
+  it("keeps focus put across re-renders driven by typing", async () => {
+    const user = userEvent.setup();
+    renderWindow({ folder: folderNode("ff4", "Work") });
+
+    // Each keystroke re-renders via setName. Focus must survive all of them.
+    await user.keyboard("abc");
+    expect(screen.getByLabelText("Name")).toHaveFocus();
+    expect(screen.getByLabelText("Name")).toHaveValue("Workabc");
+  });
+});

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import { removeBookmark, updateBookmark } from "../../lib/bookmarks/edit";
@@ -54,6 +54,7 @@ export function EditBookmarkWindow({
   const titleId = useId();
   const nameId = useId();
   const urlId = useId();
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState(bookmark.title);
   const [url, setUrl] = useState(bookmark.url ?? "");
@@ -74,8 +75,24 @@ export function EditBookmarkWindow({
     pendingIcon.kind === "upload" ||
     (pendingIcon.kind === "unchanged" && settings.hasCustomIcon);
 
+  // Renaming is the most common reason to open this window, so focus starts in
+  // the Name field. The URL field is deliberately left alone.
+  //
+  // Focus only: the existing title is NOT selected. Selecting it would make the
+  // first keystroke wipe the name, which is the wrong default for a field
+  // people open to adjust a name more often than to replace it. Chromium leaves
+  // the caret at the end of the value on programmatic focus, which is the
+  // position a rename wants.
+  //
+  // Mount only: re-focusing on later renders would pull the caret out of
+  // whichever field the user had moved to.
+  useEffect(() => {
+    nameInputRef.current?.focus();
+  }, []);
+
   // Revoke the staged upload's object URL when it's replaced or the window
   // unmounts, so a discarded preview never leaks.
+
   useEffect(() => {
     if (pendingIcon.kind !== "upload") return;
     const { previewUrl } = pendingIcon;
@@ -241,6 +258,7 @@ export function EditBookmarkWindow({
             </label>
             <input
               id={nameId}
+              ref={nameInputRef}
               type="text"
               className="edit-bookmark-input"
               value={name}
