@@ -303,34 +303,21 @@ interface.
 - **WHEN** the user submits the add or edit bookmark window with an empty or whitespace-only title
 - **THEN** the bookmark is not created or updated, and the title is not defaulted to its url
 
-### Requirement: Root Folder Import Confirms Its Target
-An import started from a root folder's row SHALL confirm the target folder by
-name before any file is chosen and before anything is created, and SHALL create
-nothing if the user cancels.
-
-This applies only to the root-row entry point. The import control inside a
-folder's settings window SHALL NOT gain a confirmation step: its target is
-evident from the window it is in, whereas a row button carries no such context.
-The confirmation exists because importing into a root creates a subfolder per
-exported folder directly inside it, and for the Bookmarks Bar that changes
-Chrome's own visible toolbar — an effect reaching outside the extension.
-
-#### Scenario: The target root is named before a file is chosen
-- **WHEN** the user activates the import button on a root folder's row
-- **THEN** a confirmation is shown naming that root folder as the destination, before any file picker is opened
-
-#### Scenario: Cancelling creates nothing
-- **WHEN** the user cancels the confirmation
-- **THEN** no file picker is opened, no folder or bookmark is created, and no report file is produced
-
-#### Scenario: The in-settings import path is unchanged
-- **WHEN** the user imports from the control inside a folder's settings window
-- **THEN** no target confirmation is shown and the flow behaves exactly as before
-
 ### Requirement: Import Reports Live Progress
 While an import runs the system SHALL display a progress indication that
 includes an animated activity indicator and a determinate count of entries
-processed against the total that will be attempted.
+processed against the total that will be attempted. Every uTab import entry
+point SHALL report this same information, so an import started from a folder's
+settings window is as legible as one started from a root folder's row.
+
+Where the import is reported SHALL follow from where it was started: a window
+that started an import reports within itself, and an import with no window to
+report into — one started from a folder row — reports in a transient surface
+that names the destination folder. Naming the destination is what allows that
+entry point to omit a confirmation step: the user learns where the import is
+landing at the moment it matters, without a dialog to dismiss. A window-started
+import needs no such naming, because the window it is reported in already
+identifies the folder.
 
 The total SHALL count only entries the import will actually attempt — each
 exported folder, and each of its bookmarks that is not an empty uTab grid slot
@@ -361,10 +348,19 @@ without animation.
 - **WHEN** an import is running and the user has requested reduced motion
 - **THEN** the in-progress state is still conveyed, and the indicator does not animate
 
+#### Scenario: An import with no window names its destination
+- **WHEN** an import started from a folder row is running
+- **THEN** its progress indication names the folder the import is creating items inside
+
+#### Scenario: Both entry points report the same information
+- **WHEN** an import is started from a folder's settings window, and separately when one is started from a root folder's row
+- **THEN** both display an activity indicator and a determinate count of entries processed against the total
+
 ### Requirement: Import Result Persists Until Acknowledged
 The system SHALL display the outcome of an import — the counts and, when a
 report file was produced, its filename — and SHALL keep that message visible
-until the user acknowledges it rather than dismissing it on a timer.
+until the user acknowledges it rather than dismissing it on a timer. This SHALL
+hold for every uTab import entry point.
 
 The message names a file the user must be able to find. A timed dismissal would
 remove the filename while the user is still reading it, defeating the report.
@@ -377,14 +373,19 @@ remove the filename while the user is still reading it, defeating the report.
 - **WHEN** an import is running or its outcome is displayed, and the user selects a different folder in the sidebar
 - **THEN** the progress or outcome message remains visible
 
+#### Scenario: The result of a settings-window import is shown in that window
+- **WHEN** an import started from a folder's settings window completes
+- **THEN** its outcome is displayed in that still-open window and is not removed on a timer
+
 ### Requirement: Import Guards Against Navigating Away
 While an import is in flight the system SHALL warn the user before the page
-unloads, and SHALL remove that warning once the import settles.
+unloads, and SHALL remove that warning once the import settles. This SHALL apply
+to every uTab import entry point.
 
-An import started from a root row leaves the canvas interactive, and clicking a
-bookmark navigates the current tab. Unloading mid-import abandons the run with
-folders and bookmarks already created and no report file written, because the
-report is emitted only when the importer finishes or fails.
+An import leaves the canvas interactive, and clicking a bookmark navigates the
+current tab. Unloading mid-import abandons the run with folders and bookmarks
+already created and no report file written, because the report is emitted only
+when the importer finishes or fails.
 
 The warning reduces accidental loss; it cannot prevent a deliberate departure.
 A partial import therefore remains possible, and re-running the same file
@@ -399,6 +400,10 @@ Creates New Items requirement.
 - **WHEN** an import completes or fails
 - **THEN** navigating away no longer triggers a leave-page confirmation
 
+#### Scenario: The guard covers imports started from a settings window
+- **WHEN** an import started from a folder's settings window is in flight and the page is about to unload
+- **THEN** the browser's leave-page confirmation is shown, as it is for an import started from a root folder's row
+
 ### Requirement: One Import At A Time
 The system SHALL allow only one import to be in flight at a time, and SHALL
 disable every import entry point while one is running.
@@ -406,3 +411,39 @@ disable every import entry point while one is running.
 #### Scenario: Import entry points are disabled during an import
 - **WHEN** an import started from one root folder's row is in flight
 - **THEN** the import button on every root folder's row is disabled, and a second import cannot be started until the first settles
+### Requirement: A Window Running An Import Cannot Be Dismissed
+A window that has started an import SHALL remain open for the whole of it and
+SHALL NOT be dismissable while it runs — not by its close control, not by
+clicking its backdrop, and not by pressing Escape. It SHALL report the import's
+progress and outcome in place, and SHALL remain open after the import finishes,
+showing the outcome and the report file's name until the user closes it
+themselves.
+
+This is what keeps an in-flight import from being orphaned. Previously such a
+window could be closed mid-import, leaving the import running with its report
+still downloading and its summary set on an unmounted component: a file
+appearing in the user's Downloads with no explanation and no summary anywhere.
+
+Blocking all three dismissal routes is required, not just the keyboard one. A
+window that guards Escape alone still has two ways to reproduce the same
+orphaning.
+
+The window SHALL become dismissable again once the import settles, whether it
+succeeded or failed, so a finished import never traps the user in a window they
+cannot close.
+
+#### Scenario: The window stays open and reports progress in place
+- **WHEN** an import started from a settings window is running
+- **THEN** that window remains open and displays the import's progress within itself
+
+#### Scenario: The window cannot be dismissed mid-import
+- **WHEN** an import is running and the user presses Escape, clicks the window's close control, or clicks its backdrop
+- **THEN** the window is not dismissed and the import continues undisturbed
+
+#### Scenario: The outcome stays in the window after the import ends
+- **WHEN** an import started from a settings window finishes
+- **THEN** that window remains open, showing the outcome and, when a report file was produced, its filename
+
+#### Scenario: The window can be closed again once the import settles
+- **WHEN** an import has completed or failed
+- **THEN** the window's close control, backdrop, and Escape dismiss it as they normally would
