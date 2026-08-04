@@ -129,20 +129,39 @@ manager and on the bookmarks bar.
 This mapping lives in a pure module with unit tests over interleaved
 bookmark/folder children, not inline in a component.
 
-### Decision 4: Pin Chrome's same-parent index semantics with a spike first
+### Decision 4: Chrome reads `index` against the pre-removal list — RESOLVED by spike
 
 `chrome.bookmarks.move` does not document whether, for a same-parent move, the
 supplied `index` is interpreted against the child list *before* or *after* the
-node is removed. The two interpretations differ by one whenever the target index
-is greater than the node's current index — the classic off-by-one in every
-reorder implementation.
+node is removed. Probed empirically in the real-Chrome Playwright harness
+against children `[A, B, C, D]`:
 
-This is resolved empirically before the mapping code is finalized, using the
-existing real-Chrome Playwright harness (`page.evaluate` with `chrome.bookmarks`
-available, as in `e2e/cross-folder-drag.spec.ts:45`), and the discovered
-behavior is locked in by a test so a Chrome change cannot silently break
-reordering. Whatever the answer, the adjustment belongs in the Decision 3 module
-as an explicit, named step — never as an unexplained `- 1`.
+| move | `index` passed | landed at | final order |
+|---|---|---|---|
+| A (index 0) later | 2 | **1** | `BACD` |
+| A (index 0) later | 4 (child count) | **3** | `BCDA` |
+| A (index 0) later | 1 | **0** | `ABCD` (unchanged) |
+| D (index 3) earlier | 1 | **1** | `ADBC` |
+
+**Chrome interprets `index` against the list *before* the node is removed.**
+Moving later therefore lands the node at `index - 1`; moving earlier lands it
+exactly at `index`.
+
+The important consequence: this is precisely the semantics of *"insert before
+whichever node currently sits at index i"*, which is exactly how Decision 1
+defines a gap. So the Decision 3 mapping passes the anchor folder's **current
+child index unchanged** — or the parent's child count for the end slot — and is
+correct in both directions with **no adjustment at all**.
+
+Verify against the table above: dragging `A` onto the gap before `C` (index 2)
+yields `BACD`, where A does precede C. Dragging `A` onto the gap before `B`
+(index 1) yields `ABCD` — A already precedes B, so "no change" is right.
+
+This is counterintuitive enough to be a trap. A future reader who assumes
+`index` means "the final resting index" will see the off-by-one, "correct" it by
+subtracting one when moving later, and silently break every downward reorder.
+The mapping module must carry this table in a comment, and the behaviour is
+locked by a test so a Chrome change cannot break it silently.
 
 ### Decision 5: Two indicators that differ in kind, not intensity
 
@@ -203,13 +222,29 @@ is the scroll container, so absolutely-positioned children scroll with content
 correctly. If gaps contributed height, rows would shift under the cursor
 mid-drag, moving the target away from the pointer and producing a jitter loop.
 
-### Decision 8: Droppable measuring strategy
+### Decision 8: Gaps are always mounted and enabled; liveness is filtered in collision detection
 
 dnd-kit's default droppable measuring (`WhileDragging`) measures at drag start.
-Gaps whose `disabled` flag is computed from the active drag — or which mount once
-a drag begins — can end up unmeasured and silently unhittable. The expected fix
-is `measuring: { droppable: { strategy: MeasuringStrategy.Always } }` on the
-`DndContext`, verified during the same spike as Decision 4 rather than assumed.
+The obvious implementation — mounting gaps when a drag begins, or toggling each
+gap's `disabled` from the active drag — races that measurement: liveness is only
+known once `active` is set, which is the same moment measurement happens, so
+gaps can end up unmeasured and silently unhittable.
+
+Rather than reach for `MeasuringStrategy.Always` (which re-measures every
+droppable on every pointer move to work around a problem we can simply not
+have), every gap is **mounted and enabled from first render**. All gaps are
+therefore measured at drag start like any other droppable, and no rect depends
+on drag state.
+
+Liveness is applied one layer up instead, in `collisionDetection`, which
+receives `active` and can drop non-live gaps from the collision list before
+choosing a winner. This gives the pointer-fall-through behaviour Decision 2
+requires — a non-live gap is simply not a candidate, so the row beneath wins —
+with exact control and no measurement coupling.
+
+Row layout is static for the duration of a drag (Decision 7 forbids layout
+shift, and rows cannot be expanded or collapsed mid-drag), so drag-start
+measurement stays valid throughout.
 
 ## Risks / Trade-offs
 
