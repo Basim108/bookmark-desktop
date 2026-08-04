@@ -1,5 +1,16 @@
 :root {
   color-scheme: light dark;
+
+  /* The one chromatic accent in the UI. Everything else that responds to
+     hover/drag is a neutral translucent wash, so the accent is reserved for
+     the sidebar's reorder insert line — the two drop meanings have to differ
+     in kind, not in intensity, or they blur together under a moving cursor.
+     Both values are picked to hold contrast against their own scheme's row
+     background and against that scheme's wash. */
+  --accent: light-dark(#0b62d6, #4c9dff);
+  /* The insert line's ring cap is filled with the surface behind it, so the
+     ring reads as a ring rather than a dot. */
+  --accent-cap-fill: light-dark(#fff, #1c1c1c);
 }
 
 html,
@@ -328,6 +339,79 @@ body {
 .folder-row--active {
   background: light-dark(rgb(0 0 0 / 8%), rgb(255 255 255 / 12%));
   border-radius: 4px;
+}
+
+/* Between-rows drop target for reordering a folder among its siblings.
+   Absolutely positioned and zero-contribution to layout: if a gap added
+   height, rows would shift under the cursor mid-drag, moving the target away
+   from the pointer and setting up a jitter loop.
+
+   Straddles the boundary it represents (10px tall, centred on the row's top
+   edge) so it is forgiving to hit, while the line it draws stays 2px so it
+   reads precisely. Inert to the pointer — dnd-kit resolves drop targets from
+   measured rects, not DOM hit-testing, so this needs a box but must never
+   intercept events from the row's own controls. */
+.folder-drop-gap {
+  position: absolute;
+  top: -5px;
+  right: 0;
+  left: 0;
+  height: 10px;
+  pointer-events: none;
+  z-index: 12;
+}
+
+/* Carries the "insert at the end" gap below the last sibling's whole subtree.
+   Zero-height so it occupies no space in the list. */
+.folder-drop-gap-slot {
+  position: relative;
+  height: 0;
+}
+
+.folder-drop-line {
+  position: absolute;
+  top: 4px;
+  right: 3px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  /* `left` is set inline, to the dragged folder's own indent. Because a gap is
+     only ever live among one parent's children, that indent is constant for
+     the whole drag — the line moves vertically and never sideways. */
+  animation: folder-drop-line-in 100ms ease-out;
+}
+
+/* The leading ring is what makes the line read as a deliberate indicator
+   rather than a stray border. */
+.folder-drop-line::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -2px;
+  width: 6px;
+  height: 6px;
+  box-sizing: border-box;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: var(--accent-cap-fill);
+  transform: translateY(-50%);
+}
+
+/* Crossing several gaps in one drag would otherwise strobe. */
+@keyframes folder-drop-line-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .folder-drop-line {
+    animation: none;
+  }
 }
 
 /* Keeps every row's own buttons clickable even when a sibling row's open

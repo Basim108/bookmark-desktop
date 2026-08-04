@@ -4,6 +4,7 @@ import { useSubfolders } from "../hooks/useSubfolders";
 import { useFolderSettings } from "../hooks/useFolderSettings";
 import { DEFAULT_FOLDER_ICON_KEY } from "../../lib/storage/defaultFolderIcon";
 import { CustomIconImage } from "./CustomIconImage";
+import { FolderDropGap } from "./FolderDropGap";
 import { FolderSettingsWindow } from "./FolderSettingsWindow";
 import type { ImportDestination } from "../hooks/useUtabImport";
 
@@ -33,6 +34,8 @@ interface FolderTreeNodeProps {
   onRequestImport: (destination: ImportDestination) => void;
   /** True while any import is in flight, which disables the import button on every root row. */
   importBusy: boolean;
+  /** The subfolder rendered immediately above this row among its siblings, if any. Lets this row's "insert before me" gap tell synchronously whether it sits adjacent to the folder being dragged (dropping there would change nothing). */
+  previousSiblingId?: string | undefined;
 }
 
 export function FolderTreeNode({
@@ -46,6 +49,7 @@ export function FolderTreeNode({
   onSetExpanded,
   onRequestImport,
   importBusy,
+  previousSiblingId,
 }: FolderTreeNodeProps) {
   const expanded = expandedIds.has(folder.id);
   // Chrome's protected top-level folders (Bookmarks Bar, Other Bookmarks,
@@ -104,6 +108,22 @@ export function FolderTreeNode({
         className={`folder-row${isActive ? " folder-row--active" : ""}${isOver ? " folder-row--over" : ""}`}
         style={{ paddingLeft: depth * 16 }}
       >
+        {/* "Insert before this row", anchored to the row's top edge. Every gap
+            is a *before* slot: the top of a row always immediately follows the
+            end of everything above it, subtree included, so the indicator can
+            never point at a position the folder won't actually land in — which
+            an "after this row" gap would do the moment the row above is
+            expanded. Root rows are skipped; Chrome refuses to move its
+            protected top-level folders, so a gap among them is never live. */}
+        {!isRoot && (
+          <FolderDropGap
+            parentId={folder.parentId}
+            slot={{ kind: "before", subfolderId: folder.id }}
+            previousSubfolderId={previousSiblingId}
+            depth={depth}
+          />
+        )}
+
         {hasChildren ? (
           <button
             type="button"
@@ -214,7 +234,7 @@ export function FolderTreeNode({
 
       {expanded && hasChildren && (
         <ul className="folder-children">
-          {subfolders.map((child) => (
+          {subfolders.map((child, index) => (
             <FolderTreeNode
               key={child.id}
               folder={child}
@@ -227,8 +247,20 @@ export function FolderTreeNode({
               onSetExpanded={onSetExpanded}
               onRequestImport={onRequestImport}
               importBusy={importBusy}
+              previousSiblingId={subfolders[index - 1]?.id}
             />
           ))}
+          {/* "Insert at the end of this folder's children". Sits after the last
+              <li>, so it lands below that sibling's entire subtree rather than
+              directly under its row. Zero-height, so it adds no layout. */}
+          <li className="folder-drop-gap-slot">
+            <FolderDropGap
+              parentId={folder.id}
+              slot={{ kind: "end" }}
+              previousSubfolderId={subfolders[subfolders.length - 1]?.id}
+              depth={depth + 1}
+            />
+          </li>
         </ul>
       )}
     </li>

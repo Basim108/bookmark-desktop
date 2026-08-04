@@ -2,37 +2,26 @@ import { useEffect, useState } from "react";
 import {
   DndContext,
   PointerSensor,
-  pointerWithin,
-  rectIntersection,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import type { CollisionDetection, DragEndEvent } from "@dnd-kit/core";
-
-/**
- * Resolve the drop target by the pointer's position first, falling back to
- * rectangle-intersection only when the pointer is over no droppable. The
- * default (rectIntersection alone) targets whichever droppable the dragged
- * element's *rectangle* overlaps most — unreliable when a large bookmark
- * icon (up to 166px) is dragged over the stack of ~22px sidebar folder rows,
- * where the icon rect overlaps several rows and can resolve to the wrong
- * folder even though the cursor is squarely inside the intended one. The
- * fallback preserves forgiving canvas-cell drops (e.g. onto a grid gap).
- */
-const collisionDetection: CollisionDetection = (args) => {
-  const pointerCollisions = pointerWithin(args);
-  return pointerCollisions.length > 0
-    ? pointerCollisions
-    : rectIntersection(args);
-};
+import type { DragEndEvent } from "@dnd-kit/core";
+import { collisionDetection } from "./collisionDetection";
 import { Canvas } from "./components/Canvas";
 import { Sidebar } from "./components/Sidebar";
 import { GeneralSettingsWindow } from "./components/GeneralSettingsWindow";
 import { useSubfolders } from "./hooks/useSubfolders";
 import { useElementSize } from "./hooks/useElementSize";
 import { useCanvasBackground } from "./hooks/useCanvasBackground";
-import { moveNodeToFolder } from "../lib/bookmarks/move";
+import {
+  moveNodeToFolder,
+  reorderFolderWithinParent,
+} from "../lib/bookmarks/move";
 import { resolveCrossFolderDrop } from "../lib/bookmarks/dragResolve";
+import type {
+  DraggedItemData,
+  FolderDropData,
+} from "../lib/bookmarks/dragResolve";
 import { forceBookmarkResync } from "../lib/bookmarks/events";
 import { getFolderAncestorChain } from "../lib/bookmarks/read";
 import { getLastFolderId, setLastFolderId } from "../lib/storage/lastFolder";
@@ -68,30 +57,34 @@ export function App() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
 
-  // Cross-folder drag (bookmark -> sidebar folder, folder -> sidebar folder)
-  // is resolved here since it's the one ancestor shared by both the sidebar
+  // Every sidebar drag (bookmark -> folder row, folder -> folder row, folder ->
+  // reorder gap) is resolved here, the one ancestor shared by both the sidebar
   // and the canvas. Within-canvas cell drops are resolved locally by Canvas
   // itself via useDndMonitor.
   async function handleDragEnd(event: DragEndEvent) {
     const action = await resolveCrossFolderDrop(
       String(event.active.id),
-      event.active.data.current as
-        | { type?: string; sourceFolderId?: string; sourceParentId?: string }
-        | undefined,
-      event.over?.data.current as
-        { type?: string; folderId?: string } | undefined,
+      event.active.data.current as DraggedItemData | undefined,
+      event.over?.data.current as FolderDropData | undefined,
     );
     if (!action) return;
-    const nodeId =
-      action.kind === "move-bookmark" ? action.bookmarkId : action.folderId;
     try {
-      await moveNodeToFolder(nodeId, action.destFolderId);
+      if (action.kind === "reorder-folder") {
+        await reorderFolderWithinParent(
+          action.folderId,
+          action.parentId,
+          action.index,
+        );
+      } else {
+        const nodeId =
+          action.kind === "move-bookmark" ? action.bookmarkId : action.folderId;
+        await moveNodeToFolder(nodeId, action.destFolderId);
+      }
     } catch {
       // chrome.bookmarks.move rejected (e.g. a case resolveCrossFolderDrop's
       // guards didn't anticipate). No onMoved event will fire, so force a
-      // resync to correct any optimistic local state (e.g. useSubfolders'
-      // synchronous removal of the dragged folder) back to the real,
-      // unchanged bookmark tree.
+      // resync to bring the sidebar back in step with the real, unchanged
+      // bookmark tree.
       forceBookmarkResync();
     }
   }
