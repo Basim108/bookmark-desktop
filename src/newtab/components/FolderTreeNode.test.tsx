@@ -24,8 +24,9 @@ beforeEach(() => {
 /**
  * Owns the shared open-window and expanded-folder state the same way Sidebar
  * does, so tests exercise the real cross-row coordination rather than a
- * stand-in. FolderTreeNode relies (via useSubfolders) on useDndMonitor, which
- * requires a DndContext ancestor — in the real app that's provided by App.
+ * stand-in. The DndContext ancestor is required by the row's own
+ * useDraggable/useDroppable — in the real app that's provided by App. The
+ * subfolder list itself does not need one (see useSubfolders.test.tsx).
  *
  * `depth` defaults to 1 (an editable, non-root folder). Root behavior is
  * exercised explicitly with depth 0.

@@ -50,7 +50,10 @@
       "Bash(gh run *)",
       "Bash(openspec archive *)",
       "Skill(commit-commands:commit)",
-      "Bash(python3 -)"
+      "Bash(python3 -)",
+      "Bash(openspec --help)",
+      "Bash(openspec change *)",
+      "Bash(git stash *)"
     ]
   }
 }

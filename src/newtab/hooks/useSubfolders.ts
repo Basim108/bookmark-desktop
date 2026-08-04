@@ -1,6 +1,4 @@
 import { useEffect, useState } from "react";
-import { useDndMonitor } from "@dnd-kit/core";
-import type { DragEndEvent } from "@dnd-kit/core";
 import { getSubfolders } from "../../lib/bookmarks/read";
 import { subscribeToBookmarkChanges } from "../../lib/bookmarks/events";
 
@@ -15,18 +13,27 @@ interface LoadedState {
 }
 
 /**
- * Loads a folder's direct subfolders in Chrome's native order. A
- * folder-to-folder drag (see FolderTreeNode) removes the moved folder from
- * the source's list immediately (a synchronous local filter, so it's safe
- * to do optimistically); the destination picking it up relies solely on
- * the live-sync refetch below, triggered by the real chrome.bookmarks.onMoved
- * event. An earlier version also optimistically appended it to the
- * destination via an async chrome.bookmarks.get() call, racing the refetch
- * — whichever settled last won, and under a loaded CI runner the refetch
- * could occasionally resolve with stale data (Chrome's own bookmark store
- * lagging just behind the event it fires) and clobber the correct
- * optimistic state with nothing to re-trigger a retry. One writer avoids
- * the race entirely.
+ * Loads a folder's direct subfolders in Chrome's native order.
+ *
+ * The list has exactly one writer: the live-sync refetch below, triggered by
+ * real chrome.bookmarks events. No drop is ever predicted locally — not on the
+ * source side of a folder move, not on the destination side.
+ *
+ * Both halves of that rule were learned the hard way. An early version
+ * optimistically appended the moved folder to the destination via an async
+ * chrome.bookmarks.get(), racing the refetch: whichever settled last won, and
+ * under a loaded CI runner the refetch could resolve with stale data (Chrome's
+ * own bookmark store lagging just behind the event it fires) and clobber the
+ * correct state with nothing to re-trigger a retry. A later version kept a
+ * synchronous optimistic *removal* on the source side, which looked safe but
+ * re-derived — incompletely — a decision that resolveCrossFolderDrop was
+ * already making: it dropped the row for drops the resolver rejects (onto the
+ * folder itself, onto one of its own descendants), so a folder that never moved
+ * vanished from the sidebar with no event coming to bring it back.
+ *
+ * One writer avoids both. What a drop means is decided in exactly one place
+ * (resolveCrossFolderDrop, executed by App); this hook only reports what the
+ * bookmark tree actually says.
  */
 export function useSubfolders(folderId: string): UseSubfoldersResult {
   const [state, setState] = useState<LoadedState>({
@@ -61,33 +68,6 @@ export function useSubfolders(folderId: string): UseSubfoldersResult {
       subscribeToBookmarkChanges(() => setReloadToken((token) => token + 1)),
     [],
   );
-
-  useDndMonitor({
-    onDragEnd(event: DragEndEvent) {
-      const activeData = event.active.data.current as
-        { type?: string; sourceParentId?: string } | undefined;
-      const overData = event.over?.data.current as
-        { type?: string; folderId?: string } | undefined;
-      if (activeData?.type !== "folder" || overData?.type !== "folder") {
-        return;
-      }
-      if (overData.folderId === activeData.sourceParentId) {
-        return;
-      }
-      const movedFolderId = String(event.active.id);
-
-      if (activeData.sourceParentId === folderId) {
-        setState((current) =>
-          current.folderId === folderId
-            ? {
-                folderId,
-                folders: current.folders.filter((f) => f.id !== movedFolderId),
-              }
-            : current,
-        );
-      }
-    },
-  });
 
   const loading = state.folderId !== folderId;
   return { folders: loading ? [] : state.folders, loading };

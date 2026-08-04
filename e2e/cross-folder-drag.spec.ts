@@ -180,8 +180,10 @@ test("dragging a folder row onto another folder row reparents it", async ({
     },
   );
 
-  // Same-tab optimistic update: folder C is no longer a direct child row
-  // under Bookmarks Bar once it's been reparented under folder D.
+  // Folder C is no longer a direct child row under Bookmarks Bar once it's
+  // been reparented under folder D. The sidebar learns this from the real
+  // chrome.bookmarks.onMoved event (nothing is predicted locally), so this
+  // asserts the live-sync path end to end.
   await expect(folderCButton).not.toBeVisible();
 
   await expect
@@ -202,4 +204,138 @@ test("dragging a folder row onto another folder row reparents it", async ({
     folderDRow.getByRole("button", { name: "Expand folder" }),
     page.getByRole("button", { name: "Cross Drag Folder C", exact: true }),
   );
+});
+
+/**
+ * Drags horizontally *within* one row: far enough to clear the pointer
+ * sensor's 8px activation distance, but never leaving the row, so the drop
+ * lands on the dragged folder's own droppable. Dropping from the row's exact
+ * centre onto itself would never start a drag at all.
+ */
+async function dragOntoItself(
+  page: import("@playwright/test").Page,
+  row: Locator,
+) {
+  const box = await row.boundingBox();
+  if (!box) throw new Error("Could not measure the dragged row");
+  const y = box.y + box.height / 2;
+  await dragBetween(
+    page,
+    { x: box.x + 8, y },
+    { x: box.x + Math.max(32, box.width - 8), y },
+  );
+}
+
+test("dropping a folder onto itself leaves it exactly where it was", async ({
+  context,
+  extensionId,
+}) => {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/src/newtab/index.html`);
+
+  const folderEId = await page.evaluate(async () => {
+    const folderE = await chrome.bookmarks.create({
+      parentId: "1",
+      title: "Self Drop Folder E",
+    });
+    return folderE.id;
+  });
+
+  await page.reload();
+
+  const bookmarksBarRow = page.locator(".folder-row", {
+    has: page.getByRole("button", { name: "Bookmarks bar", exact: true }),
+  });
+  await bookmarksBarRow.getByRole("button", { name: "Expand folder" }).click();
+
+  const folderEButton = page.getByRole("button", {
+    name: "Self Drop Folder E",
+    exact: true,
+  });
+  await expect(folderEButton).toBeVisible();
+
+  await dragOntoItself(page, folderEButton);
+
+  // Nothing may change — and crucially, nothing may change it *back* either.
+  // Settle past the drag before asserting, so a row that got removed and then
+  // restored by an unrelated resync can't pass this by accident.
+  await page.waitForTimeout(500);
+  await expect(folderEButton).toBeVisible();
+
+  const parentId = await page.evaluate(async (id) => {
+    const [node] = await chrome.bookmarks.get(id);
+    return node?.parentId;
+  }, folderEId);
+  expect(parentId).toBe("1");
+});
+
+test("dropping a folder onto its own descendant leaves it exactly where it was", async ({
+  context,
+  extensionId,
+}) => {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/src/newtab/index.html`);
+
+  const { parentId: cycleParentId } = await page.evaluate(async () => {
+    const parent = await chrome.bookmarks.create({
+      parentId: "1",
+      title: "Cycle Parent",
+    });
+    await chrome.bookmarks.create({
+      parentId: parent.id,
+      title: "Cycle Child",
+    });
+    return { parentId: parent.id };
+  });
+
+  await page.reload();
+
+  const bookmarksBarRow = page.locator(".folder-row", {
+    has: page.getByRole("button", { name: "Bookmarks bar", exact: true }),
+  });
+  await bookmarksBarRow.getByRole("button", { name: "Expand folder" }).click();
+
+  const parentButton = page.getByRole("button", {
+    name: "Cycle Parent",
+    exact: true,
+  });
+  await expect(parentButton).toBeVisible();
+
+  // Expand the parent so its own child is on screen as a drop target.
+  const parentRow = page.locator(".folder-row", { has: parentButton });
+  const childButton = page.getByRole("button", {
+    name: "Cycle Child",
+    exact: true,
+  });
+  await clickUntilVisible(
+    parentRow.getByRole("button", { name: "Expand folder" }),
+    childButton,
+  );
+
+  const sourceBox = await parentButton.boundingBox();
+  const targetBox = await childButton.boundingBox();
+  if (!sourceBox || !targetBox) throw new Error("Could not measure elements");
+
+  // chrome.bookmarks.move would reject this as a cycle, so the drop must be
+  // rejected without calling it — and the parent's row must stay put.
+  await dragBetween(
+    page,
+    {
+      x: sourceBox.x + sourceBox.width / 2,
+      y: sourceBox.y + sourceBox.height / 2,
+    },
+    {
+      x: targetBox.x + targetBox.width / 2,
+      y: targetBox.y + targetBox.height / 2,
+    },
+  );
+
+  await page.waitForTimeout(500);
+  await expect(parentButton).toBeVisible();
+
+  const stillUnderBookmarksBar = await page.evaluate(async (id) => {
+    const [node] = await chrome.bookmarks.get(id);
+    return node?.parentId;
+  }, cycleParentId);
+  expect(stillUnderBookmarksBar).toBe("1");
 });
