@@ -28,5 +28,5 @@
 
 ## 4. Follow-ups (not this change)
 
-- [ ] 4.1 `rework-utab-import` becomes fully spent once this lands — all four of its threads have shipped and this was its last unclaimed item. Worth archiving that exploration document rather than leaving it as an active change.
-- [ ] 4.2 The report's `_id` column is not an opaque key: uTab's seeded default bookmarks use their url as `_id`, and ids repeat across folders. Harmless today, recorded in `rework-utab-import`'s design, and still unclaimed.
+- [x] 4.1 `rework-utab-import` was **deleted**, not archived. All four threads shipped and this was its last unclaimed item, but the document carried nothing unique: the empty-slot arithmetic lives in `2026-07-26-ignore-utab-empty-slots`, the dropped `unsafe-url` reasoning in `2026-07-26-import-blank-named-utab-entries`, and the `_id` note in both. It had no proposal, so it would have shown as permanently-blocked artifacts, and its body statuses were stale enough to need a disclaimer. Git history keeps it.
+- [x] 4.2 Still unclaimed, and now recorded only in the two archived changes above rather than in a live document. The report's `_id` column is not an opaque key: uTab's seeded default bookmarks use their url as `_id`, and ids repeat across folders. Harmless today, recorded in `rework-utab-import`'s design, and still unclaimed.
