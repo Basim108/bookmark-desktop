@@ -58,7 +58,7 @@
     "fake-indexeddb": "^6.2.5",
     "husky": "^9.1.7",
     "jsdom": "^30.0.1",
-    "lint-staged": "^17.0.8",
+    "lint-staged": "^17.3.0",
     "prettier": "^3.9.4",
     "retire": "^5.4.3",
     "typescript": "^6.0.3",
