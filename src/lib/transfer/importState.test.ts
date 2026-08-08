@@ -110,6 +110,79 @@ describe("importState — denials (nothing changes)", () => {
   });
 });
 
+describe("importState — position compatibility across format versions", () => {
+  /** A one-bookmark file whose bookmark node is built by the caller. */
+  function fileWithNode(node: Record<string, unknown>) {
+    return baseFile({
+      roots: {
+        "1": { title: "Bookmarks Bar", children: [node as never] },
+      },
+    });
+  }
+
+  async function importedSlot(node: Record<string, unknown>) {
+    seedRoots();
+    const result = await importState(JSON.stringify(fileWithNode(node)));
+    expect(result.ok).toBe(true);
+    const created = (await getBookmarksInFolder("1"))[0]!;
+    return (await getFolderPositions("1"))[created.id];
+  }
+
+  const bookmarkNodeBase = {
+    type: "bookmark",
+    title: "Docs",
+    url: "https://docs.example",
+    settings: { labelDisplay: "under-icon", hasCustomIcon: false },
+    icon: null,
+  };
+
+  it("restores the slot a current-format file carries", async () => {
+    expect(
+      await importedSlot({ ...bookmarkNodeBase, slot: 17, position: null }),
+    ).toBe(17);
+  });
+
+  it("restores a file written before slots existed, from its position alone", async () => {
+    // A 1.0.0 file: `position` at the fixed 6x4 reference frame, no `slot`.
+    // Slot 17 renders as page 0, row 2, col 5 there.
+    expect(
+      await importedSlot({
+        ...bookmarkNodeBase,
+        position: { page: 0, row: 2, col: 5 },
+      }),
+    ).toBe(17);
+  });
+
+  it("prefers slot when a file carries both", async () => {
+    expect(
+      await importedSlot({
+        ...bookmarkNodeBase,
+        slot: 17,
+        // Deliberately disagreeing: the compatibility field must be ignored.
+        position: { page: 0, row: 0, col: 0 },
+      }),
+    ).toBe(17);
+  });
+
+  it("leaves a bookmark unpositioned when it carries neither", async () => {
+    expect(
+      await importedSlot({ ...bookmarkNodeBase, slot: null, position: null }),
+    ).toBeUndefined();
+  });
+
+  it("accepts a 1.0.0 file: the slot field was an additive, minor-version change", async () => {
+    seedRoots();
+    const file = fileWithNode({
+      ...bookmarkNodeBase,
+      position: { page: 0, row: 1, col: 2 },
+    });
+    const result = await importState(
+      JSON.stringify({ ...file, version: "1.0.0" }),
+    );
+    expect(result.ok).toBe(true);
+  });
+});
+
 describe("importState — replace strategy", () => {
   it("removes all pre-existing non-root content and recreates the file tree under the right roots", async () => {
     seedRoots();
@@ -145,6 +218,7 @@ describe("importState — replace strategy", () => {
                   type: "bookmark",
                   title: "Docs",
                   url: "https://docs.example",
+                  slot: 8,
                   position: { page: 0, row: 1, col: 2 },
                   settings: { labelDisplay: "tooltip", hasCustomIcon: false },
                   icon: null,
@@ -160,6 +234,7 @@ describe("importState — replace strategy", () => {
               type: "bookmark",
               title: "Direct",
               url: "https://direct.example",
+              slot: null,
               position: null,
               settings: { labelDisplay: "under-icon", hasCustomIcon: false },
               icon: null,
@@ -204,6 +279,7 @@ describe("importState — replace strategy", () => {
                   type: "bookmark",
                   title: "Docs",
                   url: "https://docs.example",
+                  slot: 39,
                   position: { page: 1, row: 2, col: 3 },
                   settings: { labelDisplay: "tooltip", hasCustomIcon: true },
                   icon: pngDataUrl(),
@@ -220,9 +296,7 @@ describe("importState — replace strategy", () => {
     const work = (await getSubfolders("1"))[0]!;
     const docs = (await getBookmarksInFolder(work.id))[0]!;
 
-    expect(await getFolderPositions(work.id)).toEqual({
-      [docs.id]: { page: 1, row: 2, col: 3 },
-    });
+    expect(await getFolderPositions(work.id)).toEqual({ [docs.id]: 39 });
     expect(await getBookmarkSettings(docs.id)).toEqual({
       labelDisplay: "tooltip",
       hasCustomIcon: true,
@@ -274,6 +348,7 @@ describe("importState — skip and report", () => {
               type: "bookmark",
               title: "Evil",
               url: "javascript:alert(1)",
+              slot: null,
               position: null,
               settings: { labelDisplay: "under-icon", hasCustomIcon: false },
               icon: null,
@@ -289,6 +364,7 @@ describe("importState — skip and report", () => {
                   type: "bookmark",
                   title: "Orphan",
                   url: "https://orphan.example",
+                  slot: null,
                   position: null,
                   settings: {
                     labelDisplay: "under-icon",
@@ -309,6 +385,7 @@ describe("importState — skip and report", () => {
                   type: "bookmark",
                   title: "Fine",
                   url: "https://fine.example",
+                  slot: null,
                   position: null,
                   settings: {
                     labelDisplay: "under-icon",
@@ -366,6 +443,7 @@ describe("importState — skip and report", () => {
               type: "bookmark",
               title: "NoIcon",
               url: "https://noicon.example",
+              slot: null,
               position: null,
               settings: { labelDisplay: "under-icon", hasCustomIcon: true },
               icon: "data:image/png;base64,not-a-real-image",
@@ -398,6 +476,7 @@ describe("importState — root titles and missing roots", () => {
               type: "bookmark",
               title: "Evil",
               url: "javascript:alert(1)",
+              slot: null,
               position: null,
               settings: { labelDisplay: "under-icon", hasCustomIcon: false },
               icon: null,
@@ -429,6 +508,7 @@ describe("importState — root titles and missing roots", () => {
               type: "bookmark",
               title: "Phone",
               url: "https://phone.example",
+              slot: null,
               position: null,
               settings: { labelDisplay: "under-icon", hasCustomIcon: false },
               icon: null,
@@ -464,6 +544,7 @@ describe("importState — root titles and missing roots", () => {
               type: "bookmark",
               title: "Phone",
               url: "https://phone.example",
+              slot: null,
               position: null,
               settings: { labelDisplay: "under-icon", hasCustomIcon: false },
               icon: null,
@@ -536,6 +617,7 @@ describe("importState — root titles and missing roots", () => {
               type: "bookmark",
               title: "Phone",
               url: "https://phone.example",
+              slot: null,
               position: null,
               settings: { labelDisplay: "under-icon", hasCustomIcon: false },
               icon: null,
@@ -655,6 +737,7 @@ describe("importState — the replaced tree's stored data does not survive", () 
               type: "bookmark",
               title: "Kept",
               url: "https://kept.example",
+              slot: 0,
               position: { page: 0, row: 0, col: 0 },
               settings: { labelDisplay: "tooltip", hasCustomIcon: true },
               icon: pngDataUrl(),
@@ -679,7 +762,7 @@ describe("importState — the replaced tree's stored data does not survive", () 
       index: 0,
       syncing: false,
     });
-    await setFolderPositions("1", { [oldId]: { page: 3, row: 3, col: 3 } });
+    await setFolderPositions("1", { [oldId]: 93 });
     await setBookmarkLabelDisplay(oldId, "tooltip");
     await setFolderHasCustomIcon("old-folder", true);
     await putIcon(oldId, new Blob(["old-icon"], { type: "image/png" }));
@@ -700,9 +783,7 @@ describe("importState — the replaced tree's stored data does not survive", () 
     expect(await getIcon(oldId)).toBeUndefined();
 
     // ...while everything the import wrote is intact.
-    expect(await getFolderPositions("1")).toEqual({
-      [kept.id]: { page: 0, row: 0, col: 0 },
-    });
+    expect(await getFolderPositions("1")).toEqual({ [kept.id]: 0 });
     expect(await getBookmarkSettings(kept.id)).toEqual({
       labelDisplay: "tooltip",
       hasCustomIcon: true,
@@ -779,6 +860,7 @@ describe("importState — the replaced tree's stored data does not survive", () 
               type: "bookmark",
               title: "Kept",
               url: "https://kept.example",
+              slot: 0,
               position: { page: 0, row: 0, col: 0 },
               settings: { labelDisplay: "tooltip", hasCustomIcon: true },
               icon: pngDataUrl(),
@@ -792,6 +874,7 @@ describe("importState — the replaced tree's stored data does not survive", () 
               type: "bookmark",
               title: "Lost",
               url: "https://lost.example",
+              slot: null,
               position: null,
               settings: { labelDisplay: "under-icon", hasCustomIcon: false },
               icon: null,
@@ -806,9 +889,7 @@ describe("importState — the replaced tree's stored data does not survive", () 
     expect(result.ok).toBe(true);
     const kept = (await getBookmarksInFolder("1"))[0]!;
     // The successfully created item keeps all of its restored state.
-    expect(await getFolderPositions("1")).toEqual({
-      [kept.id]: { page: 0, row: 0, col: 0 },
-    });
+    expect(await getFolderPositions("1")).toEqual({ [kept.id]: 0 });
     expect(await getBookmarkSettings(kept.id)).toEqual({
       labelDisplay: "tooltip",
       hasCustomIcon: true,

@@ -39,7 +39,7 @@ describe("exportState", () => {
     );
 
     await setStorageValue(STORAGE_KEYS.POSITIONS, {
-      "exp-work": { "exp-docs": { page: 0, row: 1, col: 2 } },
+      "exp-work": { "exp-docs": 8 },
     });
     await setStorageValue(STORAGE_KEYS.BOOKMARK_SETTINGS, {
       "exp-docs": { labelDisplay: "tooltip", hasCustomIcon: true },
@@ -78,6 +78,8 @@ describe("exportState", () => {
       type: "bookmark",
       title: "Docs",
       url: "https://docs.example",
+      slot: 8,
+      // Compatibility rendering of slot 8 at the fixed 6x4 reference frame.
       position: { page: 0, row: 1, col: 2 },
       settings: { labelDisplay: "tooltip", hasCustomIcon: true },
       icon: await blobToDataUrl(bmIcon),
@@ -102,6 +104,7 @@ describe("exportState", () => {
       type: "bookmark",
       title: "Plain",
       url: "https://plain.example",
+      slot: null,
       position: null,
       settings: { labelDisplay: "under-icon", hasCustomIcon: false },
       icon: null,

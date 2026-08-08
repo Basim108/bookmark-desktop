@@ -1,5 +1,5 @@
 import { createMutex } from "../concurrency/mutex";
-import { DEFAULT_GRID_CAPACITY, getNextFreeCell } from "../grid/placement";
+import { getNextFreeSlot } from "../grid/placement";
 import { backfillFolderPositions } from "../grid/seed";
 import { withPositionsLock } from "../concurrency/positionsLock";
 import {
@@ -7,7 +7,7 @@ import {
   removeBookmarkPosition,
   setFolderPositionsUnlocked,
 } from "../storage/positions";
-import { getMeasuredGridCapacity } from "../storage/gridCapacity";
+import { migratePositionsUnlocked } from "../storage/positionsMigration";
 import { removeBookmarkSettings } from "../storage/bookmarkSettings";
 import { removeFolderSettings } from "../storage/folderSettings";
 import { deleteIcon } from "../storage/iconDb";
@@ -17,27 +17,27 @@ import { isBookmark } from "./read";
 const mutex = createMutex();
 
 /**
- * Choosing the cell and storing it happen inside one lock acquisition. Reading
- * the occupied cells, picking the next free one, and writing it are three steps
+ * Choosing the slot and storing it happen inside one lock acquisition. Reading
+ * the occupied slots, picking the next free one, and writing it are three steps
  * that must see the same snapshot: releasing in between would let a new-tab
  * page's whole-map write drop this placement, and would also let a concurrent
- * placement pick the same "next free" cell.
+ * placement pick the same "next free" slot.
  *
- * The capacity is resolved *before* the lock, deliberately. It keeps the
- * critical section short, and it removes any chance of a future edit to
- * storage/gridCapacity.ts deadlocking here — Web Locks are not reentrant. A
- * capacity published by another tab between this read and the write only means
- * one bookmark placed against the previous measurement, which is exactly the
- * last-measured-wins behaviour this key is specified to have.
+ * No capacity is involved. This worker cannot measure one, and no longer needs
+ * to: the next free slot is the lowest integer nobody holds, so the placement
+ * it computes is the same one the canvas would have computed — the whole class
+ * of "placed against a capacity the canvas doesn't render at" is gone.
  */
 async function placeNewBookmark(folderId: string, bookmarkId: string) {
-  const capacity = (await getMeasuredGridCapacity()) ?? DEFAULT_GRID_CAPACITY;
   await withPositionsLock(async () => {
+    // First locked operation in the service worker, so this is where a profile
+    // upgrading from cell-shaped positions is converted.
+    await migratePositionsUnlocked();
     const existing = await getFolderPositionsUnlocked(folderId);
-    const cell = getNextFreeCell(Object.values(existing), capacity);
+    const slot = getNextFreeSlot(Object.values(existing));
     await setFolderPositionsUnlocked(folderId, {
       ...existing,
-      [bookmarkId]: cell,
+      [bookmarkId]: slot,
     });
   });
 }

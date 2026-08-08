@@ -1,7 +1,8 @@
 import { withPositionsLock } from "../concurrency/positionsLock";
-import type { GridCell } from "../grid/types";
+import type { Slot } from "../grid/types";
 import { getStorageValue, setStorageValue } from "./local";
-import { STORAGE_KEYS } from "./schema";
+import { getMigrationFrame, normalizePositions } from "./positionsMigration";
+import { POSITIONS_SCHEMA_SLOTS, STORAGE_KEYS } from "./schema";
 import type { FolderPositions } from "./schema";
 
 /**
@@ -9,8 +10,8 @@ import type { FolderPositions } from "./schema";
  * from two independent JS realms (background service worker + new-tab pages).
  * They are therefore serialized by withPositionsLock. Two layers exist so that
  * composite operations — ones that read, compute, and only then write (see
- * grid/seed.ts, grid/reflow.ts, bookmarks/events.ts) — can hold the lock across
- * both halves without deadlocking on a nested acquisition:
+ * grid/seed.ts, bookmarks/events.ts, storage/positionsMigration.ts) — can hold
+ * the lock across both halves without deadlocking on a nested acquisition:
  *
  *   - `…Unlocked` primitives: no lock, ONLY safe inside a held lock.
  *   - public operations: acquire the lock exactly once, then use the primitives.
@@ -19,12 +20,25 @@ import type { FolderPositions } from "./schema";
  * locked function. Web Locks are not reentrant.
  */
 
-/** Reads the whole positions map. Caller MUST already hold the positions lock. */
+/**
+ * Reads the whole positions map. Caller MUST already hold the positions lock.
+ *
+ * Tolerates positions still stored in the pre-slot cell shape by converting
+ * them in memory against the same frame the durable conversion uses, so a read
+ * that races the one-time migration (storage/positionsMigration.ts) yields slots
+ * rather than cells. Once that migration has committed, this is a plain read.
+ */
 export async function readAllPositionsUnlocked(): Promise<
   Record<string, FolderPositions>
 > {
   const positions = await getStorageValue(STORAGE_KEYS.POSITIONS);
-  return positions ?? {};
+  if (!positions) {
+    return {};
+  }
+  return normalizePositions(
+    positions as unknown as Record<string, Record<string, unknown>>,
+    await getMigrationFrame(),
+  );
 }
 
 /** Writes the whole positions map. Caller MUST already hold the positions lock. */
@@ -95,19 +109,28 @@ export async function setFolderPositions(
 export async function replaceAllPositions(
   positions: Record<string, FolderPositions>,
 ): Promise<void> {
-  await withPositionsLock(() => writeAllPositionsUnlocked(positions));
+  await withPositionsLock(async () => {
+    await writeAllPositionsUnlocked(positions);
+    // What was just written is slot-shaped, so record that: an import onto a
+    // profile that had not been migrated yet must not leave the store looking
+    // like it still needs converting.
+    await setStorageValue(
+      STORAGE_KEYS.POSITIONS_SCHEMA,
+      POSITIONS_SCHEMA_SLOTS,
+    );
+  });
 }
 
 export async function setBookmarkPosition(
   folderId: string,
   bookmarkId: string,
-  cell: GridCell,
+  slot: Slot,
 ): Promise<void> {
   await withPositionsLock(async () => {
     const folderPositions = await getFolderPositionsUnlocked(folderId);
     await setFolderPositionsUnlocked(folderId, {
       ...folderPositions,
-      [bookmarkId]: cell,
+      [bookmarkId]: slot,
     });
   });
 }
@@ -122,13 +145,13 @@ export async function setBookmarkPosition(
  */
 export async function setBookmarkPositions(
   folderId: string,
-  updates: { bookmarkId: string; cell: GridCell }[],
+  updates: { bookmarkId: string; slot: Slot }[],
 ): Promise<void> {
   await withPositionsLock(async () => {
     const folderPositions = await getFolderPositionsUnlocked(folderId);
     const next = { ...folderPositions };
     for (const update of updates) {
-      next[update.bookmarkId] = update.cell;
+      next[update.bookmarkId] = update.slot;
     }
     await setFolderPositionsUnlocked(folderId, next);
   });

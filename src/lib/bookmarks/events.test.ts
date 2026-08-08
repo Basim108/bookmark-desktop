@@ -6,7 +6,6 @@ import {
   subscribeToBookmarkChanges,
 } from "./events";
 import { getFolderPositions } from "../storage/positions";
-import { setMeasuredGridCapacity } from "../storage/gridCapacity";
 import {
   getBookmarkSettings,
   setBookmarkHasCustomIcon,
@@ -67,14 +66,14 @@ beforeEach(() => {
 });
 
 describe("onCreated", () => {
-  it("places a newly created bookmark in the next free cell", async () => {
+  it("places a newly created bookmark in the next free slot", async () => {
     const bookmark = node("b1", "folder-1");
     mock.addNode(bookmark);
     mock.chrome.bookmarks.onCreated.emit("b1", bookmark);
     await flush();
 
     const positions = await getFolderPositions("folder-1");
-    expect(positions.b1).toEqual({ page: 0, row: 0, col: 0 });
+    expect(positions.b1).toBe(0);
   });
 
   it("does not place a newly created folder (folders have no canvas position)", async () => {
@@ -100,57 +99,58 @@ describe("onCreated", () => {
     }
   }
 
-  it("fills a page to the measured capacity before moving to the next page", async () => {
-    // A page measured 9x5 = 45 cells. The 25th bookmark used to land on page 1
-    // because placement assumed the 6x4 bootstrap regardless of what the canvas
-    // could actually show.
-    await setMeasuredGridCapacity({ cols: 9, rows: 5 });
-
+  it("places each new bookmark in the next free slot, in order", async () => {
     await createBookmarks("folder-1", 25);
 
     const positions = await getFolderPositions("folder-1");
-    expect(positions.b24).toEqual({ page: 0, row: 2, col: 6 });
-    expect(Object.values(positions).every((cell) => cell.page === 0)).toBe(
-      true,
+    expect(positions.b0).toBe(0);
+    expect(positions.b24).toBe(24);
+    // How many of those fall on the first page is a render-time question the
+    // canvas answers from its own capacity; nothing here decides it.
+    expect(Object.values(positions).sort((a, b) => a - b)).toEqual(
+      Array.from({ length: 25 }, (_, i) => i),
     );
   });
 
-  it("overflows to the next page only once the measured capacity is full", async () => {
-    await setMeasuredGridCapacity({ cols: 9, rows: 5 });
-
+  it("needs no measured capacity, so a worker places exactly where a page would", async () => {
+    // The bug this replaces: the worker assumed a 6x4 bootstrap while the canvas
+    // rendered 9x5, stranding the 25th bookmark on page 1 while page 0 still had
+    // empty cells. There is no capacity in this path any more to disagree about.
     await createBookmarks("folder-1", 46);
 
     const positions = await getFolderPositions("folder-1");
-    expect(positions.b44).toEqual({ page: 0, row: 4, col: 8 });
-    expect(positions.b45).toEqual({ page: 1, row: 0, col: 0 });
+    expect(positions.b45).toBe(45);
   });
 
-  it("places against the bootstrap capacity when no page has ever measured one", async () => {
-    // Fresh profile: the service worker can be asked to place a bookmark before
-    // any new-tab page has rendered. Behaviour must match what shipped before.
-    await createBookmarks("folder-1", 25);
+  it("ignores a capacity an older build happened to record", async () => {
+    await mock.chrome.storage.local.set({ gridCapacity: { cols: 2, rows: 2 } });
+
+    await createBookmarks("folder-1", 5);
 
     const positions = await getFolderPositions("folder-1");
-    expect(positions.b23).toEqual({ page: 0, row: 3, col: 5 });
-    expect(positions.b24).toEqual({ page: 1, row: 0, col: 0 });
+    expect(positions.b4).toBe(4);
   });
 
-  it("uses the most recent measurement when it changes between placements", async () => {
-    await setMeasuredGridCapacity({ cols: 9, rows: 5 });
-    await createBookmarks("folder-1", 1);
+  it("fills a slot freed by a removal before extending past the last bookmark", async () => {
+    await mock.chrome.storage.local.set({
+      positions: { "folder-1": { kept: 0, pinned: 2 } },
+    });
 
-    await setMeasuredGridCapacity({ cols: 2, rows: 2 });
-    await createBookmarks("folder-2", 5);
+    const bookmark = node("fresh", "folder-1");
+    mock.addNode(bookmark);
+    mock.chrome.bookmarks.onCreated.emit("fresh", bookmark);
+    await flush();
 
-    const positions = await getFolderPositions("folder-2");
-    expect(positions.b4).toEqual({ page: 1, row: 0, col: 0 });
+    const positions = await getFolderPositions("folder-1");
+    expect(positions.fresh).toBe(1);
+    expect(positions.pinned).toBe(2);
   });
 });
 
 describe("onRemoved", () => {
   it("removes the stored position of a removed bookmark", async () => {
     await mock.chrome.storage.local.set({
-      positions: { "folder-1": { b1: { page: 0, row: 0, col: 0 } } },
+      positions: { "folder-1": { b1: 0 } },
     });
 
     mock.chrome.bookmarks.onRemoved.emit("b1", {
@@ -167,9 +167,9 @@ describe("onRemoved", () => {
   it("recursively cleans up every bookmark nested inside a removed folder", async () => {
     await mock.chrome.storage.local.set({
       positions: {
-        "folder-1": { f1: { page: 0, row: 0, col: 0 } },
-        f1: { b1: { page: 0, row: 0, col: 0 } },
-        f2: { b2: { page: 0, row: 0, col: 0 } },
+        "folder-1": { f1: 0 },
+        f1: { b1: 0 },
+        f2: { b2: 0 },
       },
     });
 
@@ -273,7 +273,7 @@ describe("forceBookmarkResync", () => {
 describe("onMoved", () => {
   it("ignores same-parent moves (Chrome-native reordering)", async () => {
     await mock.chrome.storage.local.set({
-      positions: { "folder-1": { b1: { page: 0, row: 2, col: 3 } } },
+      positions: { "folder-1": { b1: 17 } },
     });
 
     mock.chrome.bookmarks.onMoved.emit("b1", {
@@ -285,12 +285,12 @@ describe("onMoved", () => {
     await flush();
 
     const positions = await getFolderPositions("folder-1");
-    expect(positions.b1).toEqual({ page: 0, row: 2, col: 3 });
+    expect(positions.b1).toBe(17);
   });
 
   it("discards the old position and places the bookmark fresh in the new folder", async () => {
     await mock.chrome.storage.local.set({
-      positions: { "folder-a": { b1: { page: 0, row: 2, col: 3 } } },
+      positions: { "folder-a": { b1: 17 } },
     });
     mock.addNode(node("b1", "folder-b"));
 
@@ -303,11 +303,7 @@ describe("onMoved", () => {
     await flush();
 
     expect(await getFolderPositions("folder-a")).toEqual({});
-    expect((await getFolderPositions("folder-b")).b1).toEqual({
-      page: 0,
-      row: 0,
-      col: 0,
-    });
+    expect((await getFolderPositions("folder-b")).b1).toBe(0);
   });
 
   it("does not assign a canvas position when a folder (not a bookmark) is moved", async () => {
@@ -378,8 +374,8 @@ describe("bulk import batching", () => {
     await flush();
 
     const positions = await getFolderPositions("folder-1");
-    expect(positions.b1).toEqual({ page: 0, row: 0, col: 0 });
-    expect(positions.b2).toEqual({ page: 0, row: 0, col: 1 });
+    expect(positions.b1).toBe(0);
+    expect(positions.b2).toBe(1);
   });
 });
 
@@ -439,7 +435,7 @@ describe("durable transfer lock", () => {
     await flush();
 
     expect(await getFolderPositions("folder-1")).toEqual({
-      b1: { page: 0, row: 0, col: 0 },
+      b1: 0,
     });
   });
 
@@ -453,7 +449,7 @@ describe("durable transfer lock", () => {
     await flush();
 
     expect(await getFolderPositions("folder-1")).toEqual({
-      b1: { page: 0, row: 0, col: 0 },
+      b1: 0,
     });
   });
 });

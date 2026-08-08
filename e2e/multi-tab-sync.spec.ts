@@ -48,10 +48,7 @@ test("dragging a bookmark in one tab reflects live in another open tab", async (
       const stored = (await pageB.evaluate(() =>
         chrome.storage.local.get("positions"),
       )) as {
-        positions?: Record<
-          string,
-          Record<string, { page: number; row: number; col: number }>
-        >;
+        positions?: Record<string, Record<string, number>>;
       };
       const folderPositions = stored.positions?.["1"];
       return {
@@ -59,10 +56,7 @@ test("dragging a bookmark in one tab reflects live in another open tab", async (
         b: folderPositions?.[secondId],
       };
     })
-    .toEqual({
-      a: { page: 0, row: 0, col: 1 },
-      b: { page: 0, row: 0, col: 0 },
-    });
+    .toEqual({ a: 1, b: 0 });
 });
 
 test("a bookmark created via the bookmarks API appears live in an already-open tab", async ({

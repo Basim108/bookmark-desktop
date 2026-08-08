@@ -1,13 +1,10 @@
 import { test, expect } from "./fixtures";
 
 interface StoredPositions {
-  positions?: Record<
-    string,
-    Record<string, { page: number; row: number; col: number }>
-  >;
+  positions?: Record<string, Record<string, number>>;
 }
 
-async function readPosition(
+async function readSlot(
   page: import("@playwright/test").Page,
   bookmarkId: string,
 ) {
@@ -15,6 +12,29 @@ async function readPosition(
     chrome.storage.local.get("positions"),
   )) as StoredPositions;
   return stored.positions?.["1"]?.[bookmarkId];
+}
+
+/**
+ * Cells one rendered page holds, read from the DOM rather than recomputed.
+ *
+ * A slot carries no capacity, so which page it lands on is `slot / cellsPerPage`
+ * at whatever the canvas is currently rendering. Pinning a bookmark to "page 3"
+ * therefore means measuring the real grid first — a hard-coded slot would pin a
+ * different page on a different viewport.
+ */
+async function measureCellsPerPage(
+  page: import("@playwright/test").Page,
+): Promise<number> {
+  return page.evaluate(() => {
+    const grid = document.querySelector(".canvas-grid");
+    if (!grid) throw new Error("no rendered grid to measure");
+    return grid.querySelectorAll(".grid-cell").length;
+  });
+}
+
+/** The first slot on `pageIndex` at the currently rendered capacity. */
+function firstSlotOfPage(pageIndex: number, cellsPerPage: number): number {
+  return pageIndex * cellsPerPage;
 }
 
 // The background service worker auto-places every newly created bookmark
@@ -28,7 +48,7 @@ async function readPosition(
 async function seedPositions(
   page: import("@playwright/test").Page,
   bookmarkIds: string[],
-  positions: Record<string, { page: number; row: number; col: number }>,
+  positions: Record<string, number>,
 ) {
   await page.evaluate(async (ids) => {
     const allPlaced = async () => {
@@ -48,10 +68,10 @@ async function seedPositions(
   }, positions);
 }
 
-// Injected positions pin an exact page count independent of viewport/capacity:
-// paginate() keys fitting items by their stored page and never compacts them
-// forward, so a marker parked on page 3 keeps the folder three pages deep even
-// with empty cells before it.
+// A marker parked on the first slot of the third page keeps the folder three
+// pages deep, since page count follows the highest occupied slot. The slot is
+// derived from the grid the canvas actually rendered, so the pinning holds at
+// whatever capacity this viewport produces.
 test("drags a bookmark across multiple pages in one continuous drag", async ({
   context,
   extensionId,
@@ -73,9 +93,11 @@ test("drags a bookmark across multiple pages in one continuous drag", async ({
     });
     return { draggedId: a.id, markerId: marker.id };
   });
+  await expect(page.locator(".canvas-grid").first()).toBeVisible();
+  const cellsPerPage = await measureCellsPerPage(page);
   await seedPositions(page, [draggedId, markerId], {
-    [draggedId]: { page: 0, row: 0, col: 0 },
-    [markerId]: { page: 2, row: 0, col: 0 },
+    [draggedId]: 0,
+    [markerId]: firstSlotOfPage(2, cellsPerPage),
   });
   await page.reload();
 
@@ -109,12 +131,14 @@ test("drags a bookmark across multiple pages in one continuous drag", async ({
 
   // The dragged bookmark persisted onto the third page (index 2) — it did not
   // revert to its origin page when the page flipped mid-drag.
+  const thirdPageSlots = (slot: number | undefined) =>
+    slot === undefined ? -1 : Math.floor(slot / cellsPerPage);
   await expect
-    .poll(() => readPosition(page, draggedId))
-    .toMatchObject({ page: 2 });
+    .poll(async () => thirdPageSlots(await readSlot(page, draggedId)))
+    .toBe(2);
 
   await page.reload();
-  expect((await readPosition(page, draggedId))?.page).toBe(2);
+  expect(thirdPageSlots(await readSlot(page, draggedId))).toBe(2);
 });
 
 test("cross-page swap sends the displaced bookmark to the origin page", async ({
@@ -138,9 +162,12 @@ test("cross-page swap sends the displaced bookmark to the origin page", async ({
     });
     return { draggedId: a.id, occupantId: b.id };
   });
+  await expect(page.locator(".canvas-grid").first()).toBeVisible();
+  const cellsPerPage = await measureCellsPerPage(page);
+  const secondPageStart = firstSlotOfPage(1, cellsPerPage);
   await seedPositions(page, [draggedId, occupantId], {
-    [draggedId]: { page: 0, row: 0, col: 0 },
-    [occupantId]: { page: 1, row: 0, col: 0 },
+    [draggedId]: 0,
+    [occupantId]: secondPageStart,
   });
   await page.reload();
 
@@ -178,12 +205,6 @@ test("cross-page swap sends the displaced bookmark to the origin page", async ({
 
   // Dragged bookmark takes the second-page cell; the displaced occupant moves
   // back to the dragged bookmark's original first-page cell.
-  await expect
-    .poll(() => readPosition(page, draggedId))
-    .toEqual({ page: 1, row: 0, col: 0 });
-  expect(await readPosition(page, occupantId)).toEqual({
-    page: 0,
-    row: 0,
-    col: 0,
-  });
+  await expect.poll(() => readSlot(page, draggedId)).toBe(secondPageStart);
+  expect(await readSlot(page, occupantId)).toBe(0);
 });

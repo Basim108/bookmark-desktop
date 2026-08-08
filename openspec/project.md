@@ -7,7 +7,10 @@ bookmark icons.
 
 - Bookmarks/subfolders shown as icons on an invisible grid, paginated
   (carousel) per folder when items exceed one page.
-- Icon position (page/row/col) persists per item across tabs and restarts.
+- Icon position persists per item across tabs and restarts, stored as a
+  capacity-free slot. Resizing the window reflows where icons are drawn but
+  never rewrites what is stored, so returning to a size restores its layout
+  exactly.
 - Icons scale with window resize while below their maximum size; once at
   maximum size, further widening increases the grid's cell count instead.
 - Click a bookmark icon → navigate to its URL.

@@ -141,13 +141,14 @@ async function measureOccupancy(page: Page): Promise<PageOccupancy> {
 }
 
 /**
- * The regression test for this change. The service worker used to place every
- * new bookmark against a hardcoded 6x4, so page 0 could never hold more than
- * 24 icons however large the canvas was — item 24 was stored on page 1 while
- * page 0 still had empty cells, and paginate() never compacts forward.
+ * The service worker used to place every new bookmark against a hardcoded 6x4,
+ * so page 0 could never hold more than 24 icons however large the canvas was —
+ * item 24 was stored on page 1 while page 0 still had empty cells.
  *
- * This was impossible to write before: the suite had to keep viewports small
- * enough that capacity stayed under 24 cells.
+ * Placement is now capacity-free (the next free slot is the lowest free
+ * integer) and which page a slot falls on is decided at render time, so no
+ * context can place against a capacity the canvas does not render at. This
+ * stays as the end-to-end guard on that.
  */
 test("fills page one to the measured capacity, past the old 24-cell ceiling", async ({
   context,
@@ -429,6 +430,7 @@ test("accepts a drop on the space distributed into a cell, not just on the icon"
       insetFromSurface: surfaceRect.left - cellRect.left,
       row: 1,
       col: 0,
+      cols,
     };
   });
 
@@ -444,18 +446,14 @@ test("accepts a drop on the space distributed into a cell, not just on the icon"
   await page.mouse.move(target.x, target.y, { steps: 10 });
   await page.mouse.up();
 
+  // Stored positions are capacity-free slots; on page 0 the target cell is
+  // row * cols + col.
   await expect
     .poll(async () => {
       const stored = (await page.evaluate(() =>
         chrome.storage.local.get("positions"),
-      )) as {
-        positions?: Record<
-          string,
-          Record<string, { page: number; row: number; col: number }>
-        >;
-      };
-      const cell = stored.positions?.["1"]?.[draggedId];
-      return cell ? { row: cell.row, col: cell.col } : null;
+      )) as { positions?: Record<string, Record<string, number>> };
+      return stored.positions?.["1"]?.[draggedId];
     })
-    .toEqual({ row: target.row, col: target.col });
+    .toBe(target.row * target.cols + target.col);
 });

@@ -14,6 +14,7 @@ import type {
   FolderSettings,
 } from "../storage/schema";
 import { getSidebarWidth } from "../storage/sidebarSettings";
+import { slotToExportPosition } from "./positionCompat";
 import { PROTECTED_ROOT_IDS } from "./roots";
 import type {
   ExportFileV1,
@@ -41,11 +42,13 @@ async function buildNode(
 ): Promise<ExportNode> {
   if (isBookmark(node)) {
     const parentId = node.parentId ?? "";
+    const slot = snapshot.positions[parentId]?.[node.id] ?? null;
     return {
       type: "bookmark",
       title: node.title,
       url: node.url ?? "",
-      position: snapshot.positions[parentId]?.[node.id] ?? null,
+      slot,
+      position: slot === null ? null : slotToExportPosition(slot),
       settings: snapshot.bookmarkSettings[node.id] ?? DEFAULT_BOOKMARK_SETTINGS,
       icon: await inlineIcon(node.id),
     };

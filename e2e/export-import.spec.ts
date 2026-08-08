@@ -137,7 +137,7 @@ test("a replace-import leaves no stored data belonging to the replaced tree", as
     const [bookmark] = await chrome.bookmarks.getChildren(folderId);
     await chrome.storage.local.set({
       positions: {
-        [folderId]: { [bookmark!.id]: { page: 0, row: 2, col: 3 } },
+        [folderId]: { [bookmark!.id]: 17 },
       },
       bookmarkSettings: {
         [bookmark!.id]: { labelDisplay: "tooltip", hasCustomIcon: true },
