@@ -31,13 +31,47 @@ async function readSlot(page: Page, bookmarkId: string) {
   return stored.positions?.["1"]?.[bookmarkId];
 }
 
-/** Cells the currently rendered page holds — the grid's real capacity. */
+/**
+ * Cells the currently rendered page holds — the grid's real capacity.
+ *
+ * Returns 0 rather than throwing while no grid is mounted (the canvas renders a
+ * loading state instead of its grids until the folder's bookmarks arrive).
+ * `expect.poll` propagates a thrown callback instead of retrying it, so a
+ * transient loading frame would otherwise fail a poll outright.
+ */
 async function measureCellsPerPage(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const grid = document.querySelector(".canvas-grid");
-    if (!grid) throw new Error("no rendered grid to measure");
-    return grid.querySelectorAll(".grid-cell").length;
-  });
+  return page.evaluate(
+    () =>
+      document.querySelector(".canvas-grid")?.querySelectorAll(".grid-cell")
+        .length ?? 0,
+  );
+}
+
+/**
+ * Waits for the canvas to actually render its grid.
+ *
+ * Deliberately not `[data-folder-id]`: that attribute is on the canvas element,
+ * which is present during the loading state too, so waiting on it would let a
+ * measurement run before any grid exists.
+ */
+async function waitForGrid(page: Page) {
+  await expect(page.locator(".canvas-grid").first()).toBeVisible();
+}
+
+/**
+ * Waits until a rendered grid holds a different number of cells than before.
+ *
+ * Asserted as a positive predicate rather than `poll(...).not.toBe(previous)`,
+ * because the no-grid measurement of 0 would satisfy a bare "not equal" and let
+ * the guard pass without the grid ever having changed.
+ */
+async function expectCellsPerPageToChangeFrom(page: Page, previous: number) {
+  await expect
+    .poll(async () => {
+      const cells = await measureCellsPerPage(page);
+      return cells > 0 && cells !== previous;
+    })
+    .toBe(true);
 }
 
 /**
@@ -125,7 +159,7 @@ async function arrangeAtWide(page: Page) {
     "Resize Pinned",
   ]);
   await page.reload();
-  await expect(page.locator(".canvas-grid").first()).toBeVisible();
+  await waitForGrid(page);
 
   const cols = await page.evaluate(() => {
     const grid = document.querySelector(".canvas-grid") as HTMLElement | null;
@@ -159,7 +193,7 @@ test("a bookmark returns to the exact cell it was dragged to after a resize roun
 
   await page.setViewportSize(NARROW);
   // Guard the premise: the excursion must really change the grid.
-  await expect.poll(() => measureCellsPerPage(page)).not.toBe(wideCellsPerPage);
+  await expectCellsPerPageToChangeFrom(page, wideCellsPerPage);
 
   await page.setViewportSize(WIDE);
   await expect.poll(() => measureCellsPerPage(page)).toBe(wideCellsPerPage);
@@ -213,7 +247,7 @@ test("a reload at the other size does not disturb the arrangement", async ({
 
   await page.setViewportSize(NARROW);
   await page.reload();
-  await expect(page.locator(".canvas-grid").first()).toBeVisible();
+  await waitForGrid(page);
 
   await page.setViewportSize(WIDE);
   await expect.poll(() => measureCellsPerPage(page)).toBe(wideCellsPerPage);
@@ -243,8 +277,11 @@ test("switching folders at the other size does not disturb the arrangement", asy
     .getByRole("button", { name: OTHER_BOOKMARKS, exact: true })
     .click();
   await expect(page.locator('[data-folder-id="2"]')).toBeVisible();
+  await waitForGrid(page);
   await page.getByRole("button", { name: BOOKMARKS_BAR, exact: true }).click();
   await expect(page.locator('[data-folder-id="1"]')).toBeVisible();
+  // The switch must finish at the narrow size — that is what the test is about.
+  await expect(page.getByText("Resize Pinned")).toBeVisible();
 
   await page.setViewportSize(WIDE);
   await expect.poll(() => measureCellsPerPage(page)).toBe(wideCellsPerPage);
@@ -270,7 +307,7 @@ test("a second tab at a different size does not disturb the first tab's layout",
   const pageB = await context.newPage();
   await pageB.setViewportSize(NARROW);
   await pageB.goto(newTabUrl(extensionId));
-  await expect(pageB.locator(".canvas-grid").first()).toBeVisible();
+  await waitForGrid(pageB);
   await expect(pageB.getByText("Resize Pinned")).toBeVisible();
 
   await pageA.bringToFront();
