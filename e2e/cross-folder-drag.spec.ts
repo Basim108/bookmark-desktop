@@ -2,10 +2,7 @@ import type { Locator } from "@playwright/test";
 import { test, expect } from "./fixtures";
 
 interface StoredPositions {
-  positions?: Record<
-    string,
-    Record<string, { page: number; row: number; col: number }>
-  >;
+  positions?: Record<string, Record<string, number>>;
 }
 
 async function dragBetween(
@@ -113,7 +110,7 @@ test("dragging a bookmark onto a sidebar folder moves it there", async ({
     })
     .toBe(folderBId);
 
-  // It was placed in folder B's next free cell.
+  // It was placed in folder B's next free slot.
   await expect
     .poll(async () => {
       const stored = (await page.evaluate(() =>
@@ -121,7 +118,7 @@ test("dragging a bookmark onto a sidebar folder moves it there", async ({
       )) as StoredPositions;
       return stored.positions?.[folderBId]?.[bookmarkId];
     })
-    .toEqual({ page: 0, row: 0, col: 0 });
+    .toBe(0);
 
   // Navigating to folder B shows the bookmark there.
   await clickUntilVisible(folderBButton, page.getByText("Cross Drag Bookmark"));

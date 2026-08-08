@@ -1,4 +1,4 @@
-import type { GridCell } from "../grid/types";
+import type { GridCell, Slot } from "../grid/types";
 import type {
   BookmarkSettings,
   FolderSettings,
@@ -44,7 +44,15 @@ export interface ExportBookmarkNode {
   type: "bookmark";
   title: string;
   url: string;
-  /** Grid cell within its folder, or null when unpositioned. */
+  /** Stored position within its folder, or null when unpositioned. */
+  slot: Slot | null;
+  /**
+   * The same position rendered as a grid cell at a fixed reference capacity
+   * (see positionCompat.ts), carried only so an importer predating `slot` can
+   * still read the file. Additive, hence a minor version bump: importers of
+   * this major keep working either way. Readers of this format SHALL prefer
+   * `slot`.
+   */
   position: GridCell | null;
   settings: BookmarkSettings;
   /** base64 image data URL, or null when the bookmark has no custom icon. */

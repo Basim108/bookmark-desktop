@@ -16,56 +16,42 @@ beforeEach(() => {
 
 describe("setBookmarkPositions", () => {
   it("applies multiple updates in a single read-modify-write", async () => {
-    await setBookmarkPosition("f1", "a", { page: 0, row: 0, col: 0 });
-    await setBookmarkPosition("f1", "b", { page: 0, row: 0, col: 1 });
+    await setBookmarkPosition("f1", "a", 0);
+    await setBookmarkPosition("f1", "b", 1);
 
     // Swap a and b.
     await setBookmarkPositions("f1", [
-      { bookmarkId: "a", cell: { page: 0, row: 0, col: 1 } },
-      { bookmarkId: "b", cell: { page: 0, row: 0, col: 0 } },
+      { bookmarkId: "a", slot: 1 },
+      { bookmarkId: "b", slot: 0 },
     ]);
 
-    expect(await getFolderPositions("f1")).toEqual({
-      a: { page: 0, row: 0, col: 1 },
-      b: { page: 0, row: 0, col: 0 },
-    });
+    expect(await getFolderPositions("f1")).toEqual({ a: 1, b: 0 });
   });
 
   it("leaves positions for other bookmarks in the folder untouched", async () => {
-    await setBookmarkPosition("f1", "a", { page: 0, row: 0, col: 0 });
-    await setBookmarkPosition("f1", "c", { page: 0, row: 1, col: 0 });
+    await setBookmarkPosition("f1", "a", 0);
+    await setBookmarkPosition("f1", "c", 3);
 
-    await setBookmarkPositions("f1", [
-      { bookmarkId: "a", cell: { page: 0, row: 0, col: 2 } },
-    ]);
+    await setBookmarkPositions("f1", [{ bookmarkId: "a", slot: 2 }]);
 
-    expect(await getFolderPositions("f1")).toEqual({
-      a: { page: 0, row: 0, col: 2 },
-      c: { page: 0, row: 1, col: 0 },
-    });
+    expect(await getFolderPositions("f1")).toEqual({ a: 2, c: 3 });
   });
 });
 
 describe("replaceAllPositions", () => {
   it("replaces the stored map rather than merging into it", async () => {
-    await setBookmarkPosition("old-folder", "old-bookmark", {
-      page: 0,
-      row: 0,
-      col: 0,
-    });
+    await setBookmarkPosition("old-folder", "old-bookmark", 0);
 
-    await replaceAllPositions({
-      "new-folder": { "new-bookmark": { page: 0, row: 1, col: 2 } },
-    });
+    await replaceAllPositions({ "new-folder": { "new-bookmark": 5 } });
 
     expect(await getAllPositions()).toEqual({
-      "new-folder": { "new-bookmark": { page: 0, row: 1, col: 2 } },
+      "new-folder": { "new-bookmark": 5 },
     });
     expect(await getFolderPositions("old-folder")).toEqual({});
   });
 
   it("empties the store when given an empty map", async () => {
-    await setBookmarkPosition("f1", "a", { page: 0, row: 0, col: 0 });
+    await setBookmarkPosition("f1", "a", 0);
     await replaceAllPositions({});
     expect(await getAllPositions()).toEqual({});
   });

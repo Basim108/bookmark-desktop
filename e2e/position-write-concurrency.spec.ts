@@ -4,7 +4,7 @@ import { test, expect } from "./fixtures";
  * Stored positions live under one `chrome.storage.local` key and are updated by
  * read-modify-write from two independent JS contexts: the background service
  * worker (per-item `placeNewBookmark` on `onCreated`) and the newtab page
- * (whole-map writes from backfill, reflow and drag). The SW's in-process mutex
+ * (whole-map writes from backfill, migration and drag). The SW's in-process mutex
  * cannot serialize the page, so without cross-context locking a page write
  * built from a stale snapshot silently drops placements the SW committed in
  * between — leaving bookmarks that exist in Chrome but never appear on the

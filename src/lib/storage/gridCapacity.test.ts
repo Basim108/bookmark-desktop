@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { installChromeMock } from "../../test/chromeMock";
-import {
-  getMeasuredGridCapacity,
-  setMeasuredGridCapacity,
-} from "./gridCapacity";
+import { getMeasuredGridCapacity } from "./gridCapacity";
+import { STORAGE_KEYS } from "./schema";
 
 const mock = installChromeMock();
 
@@ -12,21 +10,24 @@ beforeEach(() => {
 });
 
 describe("measured grid capacity", () => {
-  it("round-trips a measured capacity", async () => {
-    await setMeasuredGridCapacity({ cols: 9, rows: 5 });
+  it("reads the capacity an older build recorded", async () => {
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.GRID_CAPACITY]: { cols: 9, rows: 5 },
+    });
     expect(await getMeasuredGridCapacity()).toEqual({ cols: 9, rows: 5 });
   });
 
-  it("returns undefined when nothing has ever been measured", async () => {
-    // Not a substituted default: the caller must be able to tell "no page has
-    // measured yet" apart from a real measurement, so it can name the
-    // bootstrap capacity explicitly.
+  it("returns undefined when nothing was ever measured", async () => {
+    // Not a substituted default: the migration must be able to tell "no frame
+    // on record" apart from a real one, so it can name the bootstrap frame
+    // explicitly.
     expect(await getMeasuredGridCapacity()).toBeUndefined();
   });
 
-  it("keeps the most recent measurement when pages disagree", async () => {
-    await setMeasuredGridCapacity({ cols: 9, rows: 5 });
-    await setMeasuredGridCapacity({ cols: 4, rows: 3 });
-    expect(await getMeasuredGridCapacity()).toEqual({ cols: 4, rows: 3 });
+  it("is read-only — nothing in this build publishes a capacity", async () => {
+    // Placement is capacity-free, so there is no writer left to keep in sync.
+    // Guards against a future edit quietly reintroducing one.
+    const module = await import("./gridCapacity");
+    expect(Object.keys(module)).toEqual(["getMeasuredGridCapacity"]);
   });
 });

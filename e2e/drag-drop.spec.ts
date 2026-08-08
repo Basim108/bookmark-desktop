@@ -1,10 +1,7 @@
 import { test, expect } from "./fixtures";
 
 interface StoredPositions {
-  positions?: Record<
-    string,
-    Record<string, { page: number; row: number; col: number }>
-  >;
+  positions?: Record<string, Record<string, number>>;
 }
 
 test("dragging a bookmark onto another swaps their stored positions", async ({
@@ -58,10 +55,9 @@ test("dragging a bookmark onto another swaps their stored positions", async ({
         b: folderPositions?.[secondId],
       };
     })
-    .toEqual({
-      a: { page: 0, row: 0, col: 1 },
-      b: { page: 0, row: 0, col: 0 },
-    });
+    // A swap exchanges the two bookmarks' slots: the dragged one takes the
+    // occupant's, and the occupant takes the dragged one's.
+    .toEqual({ a: 1, b: 0 });
 
   // Reload to confirm the swap actually persisted, not just in-memory state.
   await page.reload();

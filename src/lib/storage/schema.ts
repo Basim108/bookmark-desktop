@@ -1,7 +1,26 @@
-import type { GridCapacity, GridCell } from "../grid/types";
+import type { GridCapacity, GridCell, Slot } from "../grid/types";
 
-/** Positions of a folder's direct bookmark children: bookmarkId -> cell. */
-export type FolderPositions = Record<string, GridCell>;
+/**
+ * Positions of a folder's direct bookmark children: bookmarkId -> slot.
+ *
+ * A slot carries no capacity, so nothing about the current window is baked into
+ * what is stored — which is what makes a resize a pure display reflow and a size
+ * round trip the identity. The displayed cell is derived per render by
+ * grid/layout.ts's paginate.
+ */
+export type FolderPositions = Record<string, Slot>;
+
+/**
+ * Shape of the positions store. Version 1 held `(page, row, col)` cells framed
+ * on an unrecorded capacity; version 2 holds capacity-free slots. Recorded so
+ * the one-time conversion (storage/positionsMigration.ts) runs exactly once per
+ * profile, and so a second context observes the finished conversion rather than
+ * repeating it against a different frame.
+ */
+export const POSITIONS_SCHEMA_SLOTS = 2;
+
+/** Positions of a folder's direct bookmark children as stored before slots. */
+export type LegacyFolderPositions = Record<string, GridCell>;
 
 /** A folder's own sidebar row settings. Independent per folder — no inheritance chain (unlike grid settings). */
 export interface FolderSettings {
@@ -50,8 +69,13 @@ export interface BookmarkSettings {
  * (label settings) share one documented schema instead of ad-hoc keys.
  */
 export interface StorageSchema {
-  /** folderId -> (bookmarkId -> cell) */
+  /** folderId -> (bookmarkId -> slot) */
   positions: Record<string, FolderPositions>;
+  /**
+   * Which shape `positions` is stored in. Absent means the pre-slot cell shape,
+   * which is converted once on first read — see storage/positionsMigration.ts.
+   */
+  positionsSchema: number;
   /** bookmarkId -> label display + custom-icon metadata mirror */
   bookmarkSettings: Record<string, BookmarkSettings>;
   /** folderId -> sidebar display settings */
@@ -70,27 +94,21 @@ export interface StorageSchema {
    */
   lastFolderId: string;
   /**
-   * The grid capacity most recently measured by a new-tab page, so contexts
-   * that cannot measure one — chiefly the background service worker placing a
-   * bookmark created by Chrome's own UI or arriving via sync — place against
-   * the capacity the canvas actually renders at rather than a guess.
+   * Legacy: the grid capacity most recently measured by a new-tab page, written
+   * only by versions that stored positions as cells. Nothing writes it now —
+   * placement is capacity-free — and its sole remaining reader is the one-time
+   * conversion of those cells into slots, which needs the frame they were
+   * authored in. See storage/gridCapacity.ts.
    *
-   * Device-derived measurement, not a setting the user configured: it follows
-   * from window and display geometry. So, like lastFolderId, it is excluded
-   * from state export/import — restoring one machine's capacity onto another
-   * would reintroduce the very mismatch this key exists to prevent.
-   *
-   * Global rather than per-folder because capacity derives from canvas
-   * geometry, which no folder varies. Last-measured-wins: two new-tab pages at
-   * different window sizes overwrite each other and nothing reconciles them.
-   * Held as its own top-level key so writing it never read-modify-writes a
-   * record another writer shares.
+   * Device-derived measurement, not a setting the user configured, so like
+   * lastFolderId it is excluded from state export/import.
    */
   gridCapacity: GridCapacity;
 }
 
 export const STORAGE_KEYS = {
   POSITIONS: "positions",
+  POSITIONS_SCHEMA: "positionsSchema",
   BOOKMARK_SETTINGS: "bookmarkSettings",
   FOLDER_SETTINGS: "folderSettings",
   SIDEBAR_WIDTH: "sidebarWidth",

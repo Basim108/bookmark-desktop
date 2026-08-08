@@ -12,7 +12,7 @@
  * never allowed to pass unnoticed, since files of a mismatched major are denied
  * on import and existing backups would be stranded.
  */
-export const EXPORT_FORMAT_VERSION = "1.0.0";
+export const EXPORT_FORMAT_VERSION = "1.1.0";
 
 export interface SemanticVersion {
   major: number;

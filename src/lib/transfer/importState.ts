@@ -23,6 +23,7 @@ import type {
 } from "../storage/schema";
 import { setSidebarWidth } from "../storage/sidebarSettings";
 import { acquireTransferLock, releaseTransferLock } from "./lock";
+import { readNodeSlot } from "./positionCompat";
 import { PROTECTED_ROOT_IDS, ROOT_DISPLAY_NAMES } from "./roots";
 import type { ProtectedRootId, SkippedEntryRecord, SkipReason } from "./types";
 import { checkImportCompatibility } from "./version";
@@ -184,9 +185,11 @@ async function createChildren(
           ...(tooltipOnly ? { labelDisplay: "tooltip" as const } : {}),
         };
       }
-      const position = (child as { position?: unknown }).position;
-      if (isGridCell(position)) {
-        positions[newId] = position;
+      const slot = readNodeSlot(
+        child as { slot?: unknown; position?: unknown },
+      );
+      if (slot !== null) {
+        positions[newId] = slot;
       }
       continue;
     }
@@ -216,18 +219,6 @@ async function createChildren(
   if (Object.keys(positions).length > 0) {
     acc.positions[parentNewId] = positions;
   }
-}
-
-function isGridCell(
-  value: unknown,
-): value is { page: number; row: number; col: number } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as { page?: unknown }).page === "number" &&
-    typeof (value as { row?: unknown }).row === "number" &&
-    typeof (value as { col?: unknown }).col === "number"
-  );
 }
 
 /** Removes the given bookmark nodes (folders via removeTree, leaves via remove). */
