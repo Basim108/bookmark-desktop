@@ -255,14 +255,24 @@ test("reordering folders changes no stored canvas position", async ({
   ).toBeVisible();
 
   // Let the initial placement settle before snapshotting.
+  //
+  // These bookmarks live inside Pos One / Pos Two while the page shows the
+  // Bookmarks bar, so they never reach the canvas and the page's own backfill
+  // never places them — the service worker's onCreated handler is the only
+  // writer. That wait gets the same budget position-write-concurrency.spec.ts
+  // gives it (15s, polled every 250ms) rather than the 5s/10s default: on a
+  // loaded runner the SW takes seconds to wake and place, and the default
+  // expires mid-placement.
   await expect
-    .poll(async () =>
-      page.evaluate(async () => {
-        const stored = await chrome.storage.local.get("positions");
-        return Object.keys(
-          (stored as { positions?: Record<string, unknown> }).positions ?? {},
-        ).length;
-      }),
+    .poll(
+      async () =>
+        page.evaluate(async () => {
+          const stored = await chrome.storage.local.get("positions");
+          return Object.keys(
+            (stored as { positions?: Record<string, unknown> }).positions ?? {},
+          ).length;
+        }),
+      { timeout: 15000, intervals: [250] },
     )
     .toBeGreaterThan(0);
 
