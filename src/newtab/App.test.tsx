@@ -213,4 +213,108 @@ describe("App", () => {
       expect(screen.queryByText("Work")).not.toBeInTheDocument();
     });
   });
+
+  describe("announcing an update", () => {
+    function seedRoot() {
+      mock.addNode(folderNode("1", "0", "Bookmarks Bar"));
+    }
+
+    /** Puts a notice in the state the service worker would have left on update. */
+    async function seedPendingNotice() {
+      mock.setManifestVersion("1.1.0");
+      await chrome.storage.local.set({
+        releaseNotice: { pending: { from: "1.0.0", to: "1.1.0" } },
+      });
+    }
+
+    it("opens the what's-new window when an update left one pending", async () => {
+      seedRoot();
+      await seedPendingNotice();
+
+      render(<App />);
+
+      expect(
+        await screen.findByRole("dialog", { name: "What's new" }),
+      ).toBeVisible();
+    });
+
+    it("opens no window when there is nothing to announce", async () => {
+      seedRoot();
+
+      render(<App />);
+      await waitFor(() => {
+        expect(document.querySelector('[data-folder-id="1"]')).toBeTruthy();
+      });
+
+      expect(
+        screen.queryByRole("dialog", { name: "What's new" }),
+      ).not.toBeInTheDocument();
+    });
+
+    /**
+     * A new tab is very often opened in order to be left immediately. Waiting
+     * for restoration means the window never renders for those visits, so it is
+     * not spent on a user who was never going to read it.
+     */
+    it("waits for the page to finish restoring before opening", async () => {
+      seedRoot();
+      await seedPendingNotice();
+      let releaseRestore: (value: unknown) => void = () => {};
+      const restored = new Promise((resolve) => {
+        releaseRestore = resolve;
+      });
+      const realGet = chrome.storage.local.get;
+      chrome.storage.local.get = (async (keys?: unknown) => {
+        if (keys === "lastFolderId") await restored;
+        return (realGet as (k?: unknown) => Promise<unknown>)(keys);
+      }) as typeof chrome.storage.local.get;
+
+      render(<App />);
+      await screen.findByText("Bookmarks Bar");
+
+      expect(
+        screen.queryByRole("dialog", { name: "What's new" }),
+      ).not.toBeInTheDocument();
+
+      releaseRestore(undefined);
+      expect(
+        await screen.findByRole("dialog", { name: "What's new" }),
+      ).toBeVisible();
+      chrome.storage.local.get = realGet;
+    });
+
+    it("does not reopen after the user dismisses it", async () => {
+      seedRoot();
+      await seedPendingNotice();
+      const user = userEvent.setup();
+
+      const { unmount } = render(<App />);
+      await user.click(
+        await screen.findByRole("button", { name: "Close What's new" }),
+      );
+      unmount();
+
+      render(<App />);
+      await waitFor(() => {
+        expect(document.querySelector('[data-folder-id="1"]')).toBeTruthy();
+      });
+      expect(
+        screen.queryByRole("dialog", { name: "What's new" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("leaves the notice pending when the page is left without dismissing it", async () => {
+      seedRoot();
+      await seedPendingNotice();
+
+      const { unmount } = render(<App />);
+      await screen.findByRole("dialog", { name: "What's new" });
+      unmount();
+
+      render(<App />);
+      expect(
+        await screen.findByRole("dialog", { name: "What's new" }),
+      ).toBeVisible();
+    });
+  });
 });

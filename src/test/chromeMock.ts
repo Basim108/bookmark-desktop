@@ -112,9 +112,18 @@ export function installChromeMock() {
     clearListeners: () => messageListeners.clear(),
   };
 
+  // The version chrome.runtime.getManifest() reports. Settable so a test can
+  // pin the running version without depending on what package.json says today.
+  let manifestVersion = "0.0.0";
+
+  const runtimeOnInstalled =
+    createEvent<(details: chrome.runtime.InstalledDetails) => void>();
+
   const chromeMock = {
     runtime: {
       getURL: (path: string) => `chrome-extension://test-extension-id${path}`,
+      getManifest: () => ({ version: manifestVersion }),
+      onInstalled: runtimeOnInstalled,
       onMessage: runtimeOnMessage,
       // Synchronously dispatches to registered onMessage listeners (single JS
       // realm in tests) and resolves with the last sendResponse value, so the
@@ -322,10 +331,21 @@ export function installChromeMock() {
     removeNode(id: string) {
       bookmarkNodes.delete(id);
     },
+    /** Pins what chrome.runtime.getManifest().version reports. */
+    setManifestVersion(version: string) {
+      manifestVersion = version;
+    },
+
+    /** Fires chrome.runtime.onInstalled, as Chrome does on install or update. */
+    emitInstalled(details: chrome.runtime.InstalledDetails) {
+      runtimeOnInstalled.emit(details);
+    },
+
     reset() {
       // Restore create's default behaviour: a test that made it reject would
       // otherwise poison every test after it in the same file.
       chromeMock.bookmarks.create.mockImplementation(defaultBookmarksCreate);
+      manifestVersion = "0.0.0";
       storage.clear();
       sessionStorage.clear();
       bookmarkNodes.clear();
@@ -337,6 +357,7 @@ export function installChromeMock() {
       }
       storageOnChanged.clearListeners();
       runtimeOnMessage.clearListeners();
+      runtimeOnInstalled.clearListeners();
     },
   };
 }

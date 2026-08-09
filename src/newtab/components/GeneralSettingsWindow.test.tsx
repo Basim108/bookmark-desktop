@@ -9,6 +9,7 @@ import {
 } from "../../lib/storage/canvasBackground";
 import { getGeneralSettings } from "../../lib/storage/generalSettings";
 import type { CanvasBackground } from "../../lib/storage/schema";
+import { version as packageVersion } from "../../../package.json";
 import { GeneralSettingsWindow } from "./GeneralSettingsWindow";
 
 const mock = installChromeMock();
@@ -172,5 +173,89 @@ describe("GeneralSettingsWindow", () => {
     expect(
       screen.queryByRole("img", { name: "Background preview" }),
     ).not.toBeInTheDocument();
+  });
+  describe("the About control", () => {
+    it("opens the release-notice window titled About", async () => {
+      mock.setManifestVersion(packageVersion);
+      const user = userEvent.setup();
+      renderWindow();
+
+      await user.click(screen.getByRole("button", { name: "About" }));
+
+      expect(screen.getByRole("dialog", { name: "About" })).toBeVisible();
+    });
+
+    it("leaves the Settings window open beneath it", async () => {
+      mock.setManifestVersion(packageVersion);
+      const user = userEvent.setup();
+      renderWindow();
+
+      await user.click(screen.getByRole("button", { name: "About" }));
+
+      expect(screen.getByText("Settings")).toBeInTheDocument();
+    });
+
+    it("keeps a staged edit staged across an open-and-close round trip", async () => {
+      stubImageBitmap();
+      mock.setManifestVersion(packageVersion);
+      const user = userEvent.setup();
+      const { onClose } = renderWindow();
+      await user.upload(screen.getByLabelText("Upload image"), pngFile());
+      await waitFor(() => {
+        expect(
+          screen.getByRole("img", { name: "Background preview" }),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole("button", { name: "About" }));
+      await user.click(screen.getByRole("button", { name: "Close About" }));
+
+      // Still staged, neither saved nor discarded.
+      expect(
+        screen.getByRole("img", { name: "Background preview" }),
+      ).toBeInTheDocument();
+      expect(await getCanvasBackground()).toBeUndefined();
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it("lets Escape dismiss only the topmost window", async () => {
+      mock.setManifestVersion(packageVersion);
+      const user = userEvent.setup();
+      const { onClose } = renderWindow();
+      await user.click(screen.getByRole("button", { name: "About" }));
+
+      await user.keyboard("{Escape}");
+
+      expect(
+        screen.queryByRole("dialog", { name: "About" }),
+      ).not.toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it("lets a click outside dismiss only the topmost window", async () => {
+      mock.setManifestVersion(packageVersion);
+      const user = userEvent.setup();
+      const { onClose } = renderWindow();
+      await user.click(screen.getByRole("button", { name: "About" }));
+
+      await user.click(screen.getByTestId("whats-new-backdrop"));
+
+      expect(
+        screen.queryByRole("dialog", { name: "About" }),
+      ).not.toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it("restores normal Settings dismissal once the About window closes", async () => {
+      mock.setManifestVersion(packageVersion);
+      const user = userEvent.setup();
+      const { onClose } = renderWindow();
+      await user.click(screen.getByRole("button", { name: "About" }));
+      await user.keyboard("{Escape}");
+
+      await user.keyboard("{Escape}");
+
+      expect(onClose).toHaveBeenCalled();
+    });
   });
 });

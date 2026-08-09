@@ -104,6 +104,34 @@ export interface StorageSchema {
    * lastFolderId it is excluded from state export/import.
    */
   gridCapacity: GridCapacity;
+  /**
+   * Which release the user has been told about, and whether an update is
+   * waiting to be announced. Written by the service worker on install/update
+   * and by a new-tab page when the user dismisses the notice window.
+   *
+   * Describes this installation's history rather than anything the user
+   * configured, so like lastFolderId and gridCapacity it is excluded from state
+   * export/import: a backup restored from another machine must neither suppress
+   * a notice the user has not seen nor resurrect one they already dismissed.
+   *
+   * Held as its own top-level key so writing it never read-modify-writes a
+   * record another writer shares.
+   */
+  releaseNotice: ReleaseNoticeState;
+}
+
+/** The version an update moved between, awaiting its notice window. */
+export interface PendingNotice {
+  from: string;
+  to: string;
+}
+
+/** @see StorageSchema.releaseNotice */
+export interface ReleaseNoticeState {
+  /** The most recent version whose notice the user has dismissed, or which they installed fresh. */
+  seenVersion?: string | undefined;
+  /** Set on update, cleared on dismissal. Absent means nothing to announce. */
+  pending?: PendingNotice | undefined;
 }
 
 export const STORAGE_KEYS = {
@@ -115,4 +143,5 @@ export const STORAGE_KEYS = {
   GENERAL_SETTINGS: "generalSettings",
   LAST_FOLDER_ID: "lastFolderId",
   GRID_CAPACITY: "gridCapacity",
+  RELEASE_NOTICE: "releaseNotice",
 } as const satisfies Record<string, keyof StorageSchema>;

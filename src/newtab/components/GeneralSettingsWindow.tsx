@@ -20,6 +20,8 @@ import type {
   ImportChoice,
   ImportDenial,
 } from "../../lib/transfer/importState";
+import { tryGetCurrentReleaseNotes } from "../../lib/releaseNotes/current";
+import { WhatsNewWindow } from "./WhatsNewWindow";
 
 const DENIAL_MESSAGES: Record<ImportDenial, string> = {
   "invalid-json": "That file isn't a valid Bookmark Desktop backup.",
@@ -81,6 +83,9 @@ export function GeneralSettingsWindow({
   );
   const [error, setError] = useState<string | undefined>(undefined);
   const [saving, setSaving] = useState(false);
+  // The About window, stacked above this one. Opening it must not touch the
+  // staged edits, so this is plain view state and nothing else observes it.
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   // Export/Import ("Backup & Restore"). `busy` disables all footer buttons
   // while any of them runs; `transferMessage` shows an import denial (a
@@ -188,6 +193,10 @@ export function GeneralSettingsWindow({
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
+      // The About window stacks above this one and handles Escape itself. Both
+      // windows listen on the document, so without this the one keypress would
+      // close both — taking the staged edits with it.
+      if (aboutOpen) return;
       // A shown summary must be acknowledged with Reload; don't dismiss it.
       if (summary) return;
       // A running transfer must not be dismissed out from under itself.
@@ -204,7 +213,7 @@ export function GeneralSettingsWindow({
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose, confirmOpen, summary, busy]);
+  }, [onClose, confirmOpen, summary, busy, aboutOpen]);
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -288,90 +297,107 @@ export function GeneralSettingsWindow({
   // auto-download with nothing on screen to explain it, setSummary would no-op
   // on the unmounted component, and the user would never get the summary or the
   // reload prompt — leaving the UI referencing folders the import deleted.
-  const dismissable = !overlay && !busy;
+  //
+  // The About window stacks above this one, so while it is open this window
+  // stops responding to Escape and its backdrop is no longer the topmost
+  // surface a click can land on. Closing this window instead would silently
+  // discard whatever the user had staged — a background upload, a fit change —
+  // for the crime of looking up the version.
+  const dismissable = !overlay && !busy && !aboutOpen;
+
+  const aboutNotes = aboutOpen ? tryGetCurrentReleaseNotes() : undefined;
 
   return createPortal(
-    <div
-      className="general-settings-window-backdrop"
-      onClick={(event) => {
-        if (dismissable && event.target === event.currentTarget) onClose();
-      }}
-    >
+    <>
+      {aboutNotes && (
+        <WhatsNewWindow
+          notes={aboutNotes}
+          entrance="about"
+          onClose={() => setAboutOpen(false)}
+        />
+      )}
       <div
-        className="general-settings-window"
-        role={overlay ? "alertdialog" : "dialog"}
-        aria-modal="true"
-        aria-label={overlay ? "Import Bookmarks" : undefined}
-        aria-labelledby={overlay ? undefined : titleId}
+        className="general-settings-window-backdrop"
+        onClick={(event) => {
+          if (dismissable && event.target === event.currentTarget) onClose();
+        }}
       >
-        {overlay === "confirm" ? (
-          <>
-            <div className="general-settings-window-titlebar">
-              <span className="general-settings-window-title">
-                Import Bookmarks
-              </span>
-            </div>
-            <div className="general-settings-confirm">
-              <p className="general-settings-confirm-text">
-                Importing will <strong>replace</strong> all of your current
-                bookmarks and desktop settings. Back up your current setup
-                first?
-              </p>
-              <div className="general-settings-confirm-actions">
-                <button
-                  type="button"
-                  className="general-settings-window-transfer"
-                  onClick={() => answerConfirm("cancel")}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="general-settings-window-transfer"
-                  onClick={() => answerConfirm("no-backup")}
-                >
-                  No
-                </button>
-                <button
-                  type="button"
-                  className="general-settings-window-save"
-                  onClick={() => answerConfirm("backup")}
-                >
-                  Yes
-                </button>
+        <div
+          className="general-settings-window"
+          role={overlay ? "alertdialog" : "dialog"}
+          aria-modal="true"
+          aria-label={overlay ? "Import Bookmarks" : undefined}
+          aria-labelledby={overlay ? undefined : titleId}
+        >
+          {overlay === "confirm" ? (
+            <>
+              <div className="general-settings-window-titlebar">
+                <span className="general-settings-window-title">
+                  Import Bookmarks
+                </span>
               </div>
-            </div>
-          </>
-        ) : overlay === "summary" ? (
-          <>
-            <div className="general-settings-window-titlebar">
-              <span className="general-settings-window-title">
-                Import Bookmarks
-              </span>
-            </div>
-            <div className="general-settings-confirm">
-              <p className="general-settings-confirm-text">
-                Import finished, but {summary!.skipped} item
-                {summary!.skipped === 1 ? "" : "s"} could not be imported. A
-                report was saved to your downloads as{" "}
-                <strong>{summary!.reportName}</strong>.
-              </p>
-              <div className="general-settings-confirm-actions">
-                <button
-                  type="button"
-                  className="general-settings-window-save"
-                  onClick={() => window.location.reload()}
-                >
-                  Reload
-                </button>
+              <div className="general-settings-confirm">
+                <p className="general-settings-confirm-text">
+                  Importing will <strong>replace</strong> all of your current
+                  bookmarks and desktop settings. Back up your current setup
+                  first?
+                </p>
+                <div className="general-settings-confirm-actions">
+                  <button
+                    type="button"
+                    className="general-settings-window-transfer"
+                    onClick={() => answerConfirm("cancel")}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="general-settings-window-transfer"
+                    onClick={() => answerConfirm("no-backup")}
+                  >
+                    No
+                  </button>
+                  <button
+                    type="button"
+                    className="general-settings-window-save"
+                    onClick={() => answerConfirm("backup")}
+                  >
+                    Yes
+                  </button>
+                </div>
               </div>
-            </div>
-          </>
-        ) : (
-          renderSettingsBody()
-        )}
+            </>
+          ) : overlay === "summary" ? (
+            <>
+              <div className="general-settings-window-titlebar">
+                <span className="general-settings-window-title">
+                  Import Bookmarks
+                </span>
+              </div>
+              <div className="general-settings-confirm">
+                <p className="general-settings-confirm-text">
+                  Import finished, but {summary!.skipped} item
+                  {summary!.skipped === 1 ? "" : "s"} could not be imported. A
+                  report was saved to your downloads as{" "}
+                  <strong>{summary!.reportName}</strong>.
+                </p>
+                <div className="general-settings-confirm-actions">
+                  <button
+                    type="button"
+                    className="general-settings-window-save"
+                    onClick={() => window.location.reload()}
+                  >
+                    Reload
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            renderSettingsBody()
+          )}
+        </div>
       </div>
-    </div>,
+    </>,
     document.body,
   );
 
@@ -498,6 +524,14 @@ export function GeneralSettingsWindow({
               className="general-settings-window-upload-input"
               onChange={(event) => void handleImportFile(event)}
             />
+            <button
+              type="button"
+              className="general-settings-window-transfer"
+              onClick={() => setAboutOpen(true)}
+              disabled={busy || saving}
+            >
+              About
+            </button>
           </div>
           <button
             type="button"

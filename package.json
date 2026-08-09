@@ -1,6 +1,6 @@
 {
   "name": "bookmark-desktop",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Turn Chrome's new tab into a desktop of your bookmarks — a customizable grid of icons with a folder sidebar.",
   "homepage": "https://github.com/Basim108/bookmark-desktop#readme",
   "bugs": {

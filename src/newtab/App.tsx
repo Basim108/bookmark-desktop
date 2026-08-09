@@ -10,6 +10,9 @@ import { collisionDetection } from "./collisionDetection";
 import { Canvas } from "./components/Canvas";
 import { Sidebar } from "./components/Sidebar";
 import { GeneralSettingsWindow } from "./components/GeneralSettingsWindow";
+import { WhatsNewWindow } from "./components/WhatsNewWindow";
+import { useReleaseNotice } from "./hooks/useReleaseNotice";
+import { tryGetCurrentReleaseNotes } from "../lib/releaseNotes/current";
 import { useSubfolders } from "./hooks/useSubfolders";
 import { useElementSize } from "./hooks/useElementSize";
 import { useCanvasBackground } from "./hooks/useCanvasBackground";
@@ -169,6 +172,13 @@ function AppContent() {
   // the smallest tier's value, matching resolveTier's own first branch, so
   // the CSS variable is never unset before a canvas has mounted/reported.
   const [labelFontSize, setLabelFontSize] = useState("0.75rem");
+  // An update the service worker recorded but the user has not been shown yet.
+  // Kept in step with every other open new-tab page, so one dismissal settles
+  // all of them.
+  const releaseNotice = useReleaseNotice();
+  const releaseNotes = releaseNotice.pending
+    ? tryGetCurrentReleaseNotes()
+    : undefined;
 
   return (
     <div
@@ -205,6 +215,18 @@ function AppContent() {
           savedBackgroundUrl={canvasBackground.backgroundUrl}
           onSaved={canvasBackground.reload}
           onClose={() => setSettingsOpen(false)}
+        />
+      )}
+      {/* Held back until the page has finished restoring, deliberately. A new
+          tab is very often opened in order to be left immediately — the user
+          types in the omnibox and is gone — and announcing an update to that
+          visit would spend the appearance on someone who was never going to
+          read it. Waiting means the window renders for users who stay. */}
+      {canvasReady && releaseNotes && (
+        <WhatsNewWindow
+          notes={releaseNotes}
+          entrance="update"
+          onClose={() => void releaseNotice.dismiss()}
         />
       )}
     </div>
