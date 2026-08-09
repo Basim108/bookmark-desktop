@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { DragOverlay, useDndContext, useDndMonitor } from "@dnd-kit/core";
 import type {
@@ -10,6 +10,7 @@ import { resolveDrop } from "../../lib/grid/dragDrop";
 import { GRID_GAP, GRID_PADDING } from "../../lib/grid/sizing";
 import { useGridLayout } from "../hooks/useGridLayout";
 import { useEdgePagination } from "../hooks/useEdgePagination";
+import { useWheelPagination } from "../hooks/useWheelPagination";
 import { BookmarkIcon } from "./BookmarkIcon";
 import { DraggedBookmarkOverlay } from "./DraggedBookmarkOverlay";
 import { GridCell } from "./GridCell";
@@ -69,7 +70,7 @@ export function Canvas({
   // measures droppables at drag start and doesn't re-measure them when a
   // descendant's state (currentPage) flips one page from hidden to visible.
   // Without this, a drop on the advanced-to page resolves to no cell.
-  const { measureDroppableContainers } = useDndContext();
+  const { measureDroppableContainers, active } = useDndContext();
   useEffect(() => {
     // Empty id list re-measures every droppable (matches dnd-kit's own
     // internal no-arg usage).
@@ -104,11 +105,68 @@ export function Canvas({
     return false;
   });
 
+  // Horizontal wheel paging, the pointer-driven counterpart to the pagination
+  // buttons. Bounds are enforced here rather than in the hook, since only the
+  // canvas knows how many pages exist.
+  const wheelPagination = useWheelPagination((direction) => {
+    if (direction === -1 && canGoPrev) {
+      setCurrentPage(currentPage - 1);
+    }
+    if (direction === 1 && canGoNext) {
+      setCurrentPage(currentPage + 1);
+    }
+  });
+
+  // The wheel listener is registered once and reads the latest handler through
+  // this ref. Re-registering it per render — or per drag-state change — would
+  // churn a listener that must stay attached for the life of the canvas.
+  const onWheelRef = useRef<(event: WheelEvent) => void>(() => {});
+  const handleWheelEvent = (event: WheelEvent) => {
+    // Vertical wheel is left entirely alone: the grid never scrolls
+    // vertically, and prevention here would be prevention of nothing.
+    if (event.deltaX === 0) return;
+    // Unconditional, and deliberately before the drag gate and the bounds
+    // check: an unprevented horizontal wheel over a non-scrolling area is
+    // what triggers Chrome's back/forward gesture, which on a new-tab page
+    // would navigate the user clean off the canvas. Prevent it even when no
+    // page turn results.
+    event.preventDefault();
+    // Drag-to-edge auto-advance owns paging during a drag. A stray thumbwheel
+    // nudge here would relocate an in-flight icon to a page the user never
+    // meant to drop on.
+    if (active) return;
+    const container = containerRef.current;
+    if (!container) return;
+    wheelPagination.handleWheel(event, container.clientWidth);
+  };
+
+  // Refreshed after every render (no dep array) so the once-registered
+  // listener below always invokes the current closure — page state, bounds and
+  // drag state included. Wheel events only arrive from user input, well after
+  // paint, so the handler is never read before this has run.
+  useEffect(() => {
+    onWheelRef.current = handleWheelEvent;
+  });
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const listener = (event: WheelEvent) => onWheelRef.current(event);
+    // `passive: false` is load-bearing, and React's `onWheel` prop cannot
+    // substitute: React registers wheel listeners as passive at the root,
+    // which makes the preventDefault above a silent no-op.
+    container.addEventListener("wheel", listener, { passive: false });
+    return () => container.removeEventListener("wheel", listener);
+  }, [containerRef]);
+
   useDndMonitor({
     onDragStart(event: DragStartEvent) {
       const activeData = event.active.data.current as
         { type?: string } | undefined;
       if (activeData?.type !== "bookmark") return;
+      // Drop any input banked before the drag so the first wheel event after
+      // it ends starts from zero rather than turning a page immediately.
+      wheelPagination.reset();
       setActiveBookmarkId(String(event.active.id));
     },
     onDragMove(event: DragMoveEvent) {

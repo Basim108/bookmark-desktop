@@ -284,4 +284,129 @@ describe("Canvas", () => {
     expect(await screen.findByText("Renamed Bookmark")).toBeInTheDocument();
     expect(screen.queryByText("Bookmark b0")).not.toBeInTheDocument();
   });
+
+  describe("horizontal wheel pagination", () => {
+    /**
+     * Dispatches a real WheelEvent at the canvas container. The listener is
+     * registered imperatively (non-passive), so this goes through
+     * dispatchEvent rather than any React synthetic path — and the returned
+     * event carries whether the default was prevented.
+     */
+    function wheelOverCanvas(init: WheelEventInit): WheelEvent {
+      const container = document.querySelector(".canvas");
+      if (!container) throw new Error("canvas container not mounted");
+      const event = new WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        ...init,
+      });
+      act(() => {
+        container.dispatchEvent(event);
+      });
+      return event;
+    }
+
+    async function renderTwoPageFolder() {
+      mock.addNode(folderNode("f1", "0"));
+      for (let i = 0; i < 10; i++) {
+        mock.addNode(bookmarkNode(`b${i}`, "f1", i));
+      }
+      renderCanvas("f1");
+      await resizeCanvas(400, 200);
+      await waitFor(() => {
+        expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
+      });
+    }
+
+    it("advances to the next page on rightward wheel input", async () => {
+      await renderTwoPageFolder();
+
+      wheelOverCanvas({ deltaX: 100 });
+
+      expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
+      expect(screen.getByText("Bookmark b8")).toBeVisible();
+    });
+
+    it("returns to the previous page on leftward wheel input", async () => {
+      const user = userEvent.setup();
+      await renderTwoPageFolder();
+      await user.click(screen.getByRole("button", { name: "Next page" }));
+      expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
+
+      wheelOverCanvas({ deltaX: -100 });
+
+      expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
+    });
+
+    it("does not change page on vertical wheel input", async () => {
+      await renderTwoPageFolder();
+
+      wheelOverCanvas({ deltaY: 400 });
+
+      expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
+    });
+
+    it("does not wrap past the last page", async () => {
+      const user = userEvent.setup();
+      await renderTwoPageFolder();
+      await user.click(screen.getByRole("button", { name: "Next page" }));
+
+      wheelOverCanvas({ deltaX: 100 });
+
+      expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
+    });
+
+    it("does not wrap before the first page", async () => {
+      await renderTwoPageFolder();
+
+      wheelOverCanvas({ deltaX: -100 });
+
+      expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
+    });
+
+    // The listener must be registered non-passive; under a passive listener
+    // preventDefault is a silent no-op and Chrome's horizontal-overscroll
+    // gesture would navigate the new-tab page backwards in history. jsdom
+    // honours passive semantics, so defaultPrevented catches that regression.
+    it("prevents the browser default on horizontal wheel input", async () => {
+      await renderTwoPageFolder();
+
+      const event = wheelOverCanvas({ deltaX: 100 });
+
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it("prevents the browser default even where no page change results", async () => {
+      await renderTwoPageFolder();
+
+      // At the first page, leftward input turns nothing — but an unprevented
+      // horizontal overscroll here is exactly what triggers history-back.
+      const event = wheelOverCanvas({ deltaX: -100 });
+
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it("leaves vertical wheel input un-prevented", async () => {
+      await renderTwoPageFolder();
+
+      const event = wheelOverCanvas({ deltaY: 400 });
+
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    it("ignores wheel input in a folder that fits on a single page", async () => {
+      mock.addNode(folderNode("f1", "0"));
+      mock.addNode(bookmarkNode("b0", "f1", 0));
+      renderCanvas("f1");
+      await resizeCanvas(400, 200);
+      await waitFor(() => {
+        expect(screen.getByText("Bookmark b0")).toBeVisible();
+      });
+
+      const event = wheelOverCanvas({ deltaX: 100 });
+
+      expect(screen.queryByText(/Page \d+ of/)).not.toBeInTheDocument();
+      expect(event.defaultPrevented).toBe(true);
+    });
+  });
 });
