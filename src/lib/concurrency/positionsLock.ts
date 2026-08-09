@@ -23,7 +23,7 @@ const fallbackMutex = createMutex();
  * Positions live under a single `chrome.storage.local` key that is updated by
  * read-modify-write from two independent JS realms: the background service
  * worker (per-item placement on `onCreated`) and the new-tab page (whole-map
- * writes from backfill, reflow and drag). `createMutex` is a promise chain in
+ * writes from backfill, migration and drag). `createMutex` is a promise chain in
  * one module instance, so it cannot serialize across realms — without this
  * lock, a write built from a stale snapshot silently discards entries the other
  * realm committed in between, stranding bookmarks with no position forever.

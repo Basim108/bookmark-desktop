@@ -13,11 +13,12 @@ export interface PositionUpdate {
  * and ends on another — after drag-to-edge auto-advance — still finds both
  * the dragged item and any occupant of the destination cell. A drag is
  * always authoritative: it overwrites stored position unconditionally,
- * regardless of whether the dragged or displaced item was previously
- * "pinned" or shrink-compacted (see lib/grid/layout.ts). Dropping onto an
- * empty cell just relocates the dragged item; dropping onto an occupied
- * cell swaps the two — including across pages, where the occupant inherits
- * the dragged item's original cell on its original page.
+ * regardless of where the current window size happens to be displaying it.
+ * The cell the user dropped on is converted to a slot at the storage boundary
+ * (see newtab/hooks/useGridLayout.ts). Dropping onto an empty cell just
+ * relocates the dragged item; dropping onto an occupied cell swaps the two —
+ * including across pages, where the occupant inherits the dragged item's
+ * original cell on its original page.
  */
 export function resolveDrop(
   activeId: string,

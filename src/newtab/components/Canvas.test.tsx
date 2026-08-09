@@ -252,8 +252,8 @@ describe("Canvas", () => {
     // Simulates another open new-tab page swapping these two bookmarks'
     // positions, not a drag within this Canvas instance.
     await setBookmarkPositions("f1", [
-      { bookmarkId: "b0", cell: { page: 0, row: 0, col: 1 } },
-      { bookmarkId: "b1", cell: { page: 0, row: 0, col: 0 } },
+      { bookmarkId: "b0", slot: 1 },
+      { bookmarkId: "b1", slot: 0 },
     ]);
 
     await waitFor(() => {

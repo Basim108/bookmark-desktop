@@ -53,7 +53,8 @@
       "Bash(python3 -)",
       "Bash(openspec --help)",
       "Bash(openspec change *)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Skill(commit-commands:commit-push-pr)"
     ]
   }
 }

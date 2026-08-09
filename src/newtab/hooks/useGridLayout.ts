@@ -5,11 +5,8 @@ import { getBookmarksInFolder } from "../../lib/bookmarks/read";
 import { subscribeToBookmarkChanges } from "../../lib/bookmarks/events";
 import type { PositionUpdate } from "../../lib/grid/dragDrop";
 import { paginate } from "../../lib/grid/layout";
+import { cellToSlot } from "../../lib/grid/placement";
 import { backfillFolderPositions } from "../../lib/grid/seed";
-import {
-  reflowFolderPositions,
-  shouldReflowOnGrowth,
-} from "../../lib/grid/reflow";
 import {
   GRID_GAP,
   GRID_PADDING,
@@ -18,7 +15,6 @@ import {
 } from "../../lib/grid/sizing";
 import type { GridCapacity } from "../../lib/grid/types";
 import type { LayoutCell } from "../../lib/grid/layout";
-import { setMeasuredGridCapacity } from "../../lib/storage/gridCapacity";
 import { onStorageKeysChanged } from "../../lib/storage/onChanged";
 import { setBookmarkPositions } from "../../lib/storage/positions";
 import { STORAGE_KEYS } from "../../lib/storage/schema";
@@ -78,12 +74,10 @@ export function useGridLayout(folderId: string): UseGridLayoutResult {
     folderId,
     page: 0,
   });
-  const previousCapacityRef = useRef<GridCapacity | null>(null);
-  // Distinct from previousCapacityRef, which is pinned to the last capacity
-  // that *mutated* stored positions (and deliberately survives a shrink). This
-  // one tracks what was last published to storage, so an unchanged capacity
-  // does not rewrite the key on every resize frame.
-  const lastPublishedCapacityRef = useRef<GridCapacity | null>(null);
+  // Which folder has already had its missing positions seeded this session.
+  // Seeding is a first-run/backfill concern only — nothing about the window
+  // size participates, because a slot carries no capacity.
+  const backfilledFolderRef = useRef<string | null>(null);
 
   const dataLoaded = folderData?.folderId === folderId;
 
@@ -93,7 +87,7 @@ export function useGridLayout(folderId: string): UseGridLayoutResult {
   // the one inside `.then()`.
   useEffect(() => {
     let cancelled = false;
-    previousCapacityRef.current = null;
+    backfilledFolderRef.current = null;
     void getBookmarksInFolder(folderId)
       .then((bookmarks) => {
         if (!cancelled) {
@@ -113,11 +107,10 @@ export function useGridLayout(folderId: string): UseGridLayoutResult {
   // Live sync: refetch this folder's direct bookmark children on any
   // bookmark/folder structure change, whether from this extension's own UI
   // or Chrome's native bookmark manager, this tab or another open one.
-  // Deliberately doesn't reset previousCapacityRef — position bookkeeping
-  // (backfill/reflow/cleanup) is already handled by the background
-  // listener and arrives here separately via the storage.onChanged
-  // subscription below; this only refreshes bookmark identity data
-  // (title/url) for rendering.
+  // Deliberately doesn't reset backfilledFolderRef — position bookkeeping
+  // (backfill/cleanup) is already handled by the background listener and
+  // arrives here separately via the storage.onChanged subscription below;
+  // this only refreshes bookmark identity data (title/url) for rendering.
   useEffect(
     () =>
       subscribeToBookmarkChanges(() => {
@@ -141,71 +134,32 @@ export function useGridLayout(folderId: string): UseGridLayoutResult {
     [size.width, size.height],
   );
 
-  // Once real dimensions are measured, seed any missing positions using
-  // the first-observed capacity as this session's baseline. Subsequent
-  // *growth* triggers the mutating backfill repack. Shrink NEVER mutates
-  // stored positions (see lib/grid/layout.ts's paginate) — it's handled
-  // purely at render time below — so previousCapacityRef intentionally
-  // stays pinned to the last-mutated baseline across a shrink, meaning a
-  // later growth is still compared against pre-shrink capacity.
+  // Seed a position for any bookmark that lacks one, once per folder.
+  //
+  // Deliberately not keyed on `capacity`: a slot is capacity-free, so there is
+  // nothing for a resize to recompute and no reason to wait for a measurement.
+  // This is the *only* position write this hook performs outside a user action,
+  // and it never touches a bookmark that already has a slot — which is what
+  // makes "a window resize never writes stored positions" hold literally.
   useEffect(() => {
-    if (!dataLoaded || size.width === 0 || size.height === 0) {
+    if (!dataLoaded || backfilledFolderRef.current === folderId) {
       return;
     }
     let cancelled = false;
-    const previous = previousCapacityRef.current;
-    if (!previous) {
-      void backfillFolderPositions(folderId, capacity).then((result) => {
-        if (!cancelled) {
-          setPositions(result);
-          previousCapacityRef.current = capacity;
-        }
-      });
-    } else if (shouldReflowOnGrowth(previous, capacity)) {
-      void reflowFolderPositions(folderId, capacity).then((result) => {
-        if (!cancelled) {
-          setPositions(result);
-          previousCapacityRef.current = capacity;
-        }
-      });
-    }
+    backfilledFolderRef.current = folderId;
+    void backfillFolderPositions(folderId).then((result) => {
+      if (!cancelled) {
+        setPositions(result);
+      }
+    });
     return () => {
       cancelled = true;
     };
-  }, [folderId, dataLoaded, capacity, size.width, size.height]);
-
-  // Publish the measured capacity so contexts that cannot measure one — chiefly
-  // the background service worker placing a bookmark created by Chrome's own UI
-  // or arriving via sync — place against the grid this canvas actually renders.
-  //
-  // Gated on a non-zero measurement: before the container is laid out,
-  // computeGridCapacity floors to the 1x1 minimum, and persisting that would
-  // strand every bookmark past the first on its own page. Deliberately NOT
-  // gated on dataLoaded — capacity is pure canvas geometry and has nothing to
-  // do with which folder's bookmarks have loaded, so waiting on them would
-  // withhold a valid measurement for no reason.
-  //
-  // Last-measured-wins across tabs by design (see storage/gridCapacity.ts), so
-  // there is nothing to reconcile and no cleanup on unmount.
-  useEffect(() => {
-    if (size.width === 0 || size.height === 0) {
-      return;
-    }
-    const previous = lastPublishedCapacityRef.current;
-    if (
-      previous &&
-      previous.cols === capacity.cols &&
-      previous.rows === capacity.rows
-    ) {
-      return;
-    }
-    lastPublishedCapacityRef.current = capacity;
-    void setMeasuredGridCapacity(capacity);
-  }, [capacity, size.width, size.height]);
+  }, [folderId, dataLoaded]);
 
   // Cross-tab live sync: another open new-tab page's position writes arrive
   // here via chrome.storage.onChanged. The writing tab already resolved
-  // backfill/reflow before persisting, so this is a direct apply.
+  // backfill before persisting, so this is a direct apply.
   useEffect(
     () =>
       onStorageKeysChanged([STORAGE_KEYS.POSITIONS], (changes) => {
@@ -258,9 +212,10 @@ export function useGridLayout(folderId: string): UseGridLayoutResult {
     },
   });
 
-  // paginate() is a pure display computation: it's re-run on every render
-  // against the *current* capacity, so shrink-driven compaction/overflow
-  // always reflects the latest size even though nothing was persisted.
+  // paginate() is a pure display computation: it re-runs on every render
+  // against the *current* capacity, so the layout always reflects the latest
+  // size even though a resize persists nothing. Returning to a size the folder
+  // was viewed at redisplays it identically, by arithmetic.
   const pages = paginate(positions, capacity);
   const currentPage =
     pageSelection.folderId === folderId
@@ -273,15 +228,24 @@ export function useGridLayout(folderId: string): UseGridLayoutResult {
     ]),
   );
 
+  /**
+   * The storage boundary, and the only place the current capacity is consulted
+   * for a write: a drag resolves against the cells the user can see, and the
+   * cell they dropped on is converted once, here, into the slot that is stored.
+   */
   async function moveBookmarks(updates: PositionUpdate[]): Promise<void> {
     if (updates.length === 0) {
       return;
     }
-    await setBookmarkPositions(folderId, updates);
+    const slotUpdates = updates.map((update) => ({
+      bookmarkId: update.bookmarkId,
+      slot: cellToSlot(update.cell, capacity),
+    }));
+    await setBookmarkPositions(folderId, slotUpdates);
     setPositions((current) => {
       const next = { ...current };
-      for (const update of updates) {
-        next[update.bookmarkId] = update.cell;
+      for (const update of slotUpdates) {
+        next[update.bookmarkId] = update.slot;
       }
       return next;
     });
