@@ -725,6 +725,28 @@ describe("importState — the measured grid capacity is left alone", () => {
   });
 });
 
+describe("importState — the release notice state is left alone", () => {
+  it("neither suppresses a pending notice nor resurrects a dismissed one", async () => {
+    // The file carries nothing about what this installation has been shown, and
+    // the importing profile's own record is the only true one. Letting an
+    // import touch it would either hide an update the user has not been told
+    // about or replay one they already dismissed.
+    seedRoots();
+    await setStorageValue(STORAGE_KEYS.RELEASE_NOTICE, {
+      seenVersion: "1.0.0",
+      pending: { from: "1.0.0", to: "1.1.0" },
+    });
+
+    const result = await importState(JSON.stringify(baseFile()));
+
+    expect(result.ok).toBe(true);
+    expect(await getStorageValue(STORAGE_KEYS.RELEASE_NOTICE)).toEqual({
+      seenVersion: "1.0.0",
+      pending: { from: "1.0.0", to: "1.1.0" },
+    });
+  });
+});
+
 describe("importState — the replaced tree's stored data does not survive", () => {
   /** A file placing one bookmark (with icon + tooltip setting) under the bar. */
   function fileWithOneBookmark() {

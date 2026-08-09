@@ -139,4 +139,20 @@ describe("exportState", () => {
     expect(JSON.stringify(result)).not.toContain("gridCapacity");
     expect(result.general).not.toHaveProperty("gridCapacity");
   });
+
+  it("does not export which release the user has been told about", async () => {
+    // Same class of reason again: a record of what this installation has been
+    // shown, not a setting the user chose. Carrying it into a file would let a
+    // backup suppress a notice the importing user has never seen.
+    mock.addNode(folder("1", "0", "Bookmarks Bar", 0));
+    await setStorageValue(STORAGE_KEYS.RELEASE_NOTICE, {
+      seenVersion: "1.1.0",
+    });
+
+    const result = await exportState();
+
+    expect(JSON.stringify(result)).not.toContain("releaseNotice");
+    expect(JSON.stringify(result)).not.toContain("seenVersion");
+    expect(result.general).not.toHaveProperty("releaseNotice");
+  });
 });
