@@ -59,7 +59,7 @@
     "husky": "^9.1.7",
     "jsdom": "^30.0.1",
     "lint-staged": "^17.3.0",
-    "prettier": "^3.9.4",
+    "prettier": "^3.9.6",
     "retire": "^5.4.3",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0",
