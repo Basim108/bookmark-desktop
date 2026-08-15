@@ -8,7 +8,7 @@
 ## 1. Close the CI gap that would make the release gate vacuous
 
 - [x] 1.1 Extend `.github/workflows/ci.yml`'s `paths` filters (both `pull_request` and `push`) to include `package.json`, `package-lock.json`, and `CHANGELOG.md` — today a release-bump commit touches only these and matches **none** of `src/**`, `e2e/**`, `.github/**`, so it produces zero check runs
-- [ ] 1.2 Verify the gap is closed before relying on it: open a branch touching only `package.json` and confirm CI actually runs on it
+- [x] 1.2 Verify the gap is closed before relying on it: open a branch touching only `package.json` and confirm CI actually runs on it
 
 ## 2. Contributor-facing release body
 
@@ -53,5 +53,5 @@
 ## 7. Verification
 
 - [ ] 7.1 Verify each refusal path deliberately: a mismatched tag, a commit with a failed check, and a commit with no checks at all each fail **before** any upload
-- [ ] 7.2 Verify the breaking-change guard fails a bump PR whose changelog entry omits a required heads-up
-- [ ] 7.3 Run `openspec validate release-to-web-store --strict` and confirm it passes
+- [x] 7.2 Verify the breaking-change guard fails a bump PR whose changelog entry omits a required heads-up
+- [x] 7.3 Run `openspec validate release-to-web-store --strict` and confirm it passes
