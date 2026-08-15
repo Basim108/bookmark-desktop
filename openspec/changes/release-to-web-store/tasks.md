@@ -1,8 +1,8 @@
 ## 0. Blocking prerequisites
 
-- [ ] 0.1 **Confirm the Google Cloud OAuth consent screen backing the publishing credentials is Published (or Internal).** Do not start any task below until this is confirmed — a refresh token generated under a **Testing** consent screen expires after seven days and fails every later release with an opaque `invalid_grant`. See design.md → "Prerequisite: OAuth consent screen"
-- [ ] 0.2 Generate the refresh token **after** 0.1, not before; a token minted under Testing status does not become long-lived when the consent screen is published later
-- [ ] 0.3 Add four repository secrets: OAuth client id, client secret, refresh token, and the Chrome Web Store extension id. No signing key — store uploads are plain zips
+- [x] 0.1 **Confirm the Google Cloud OAuth consent screen backing the publishing credentials is Published (or Internal).** Do not start any task below until this is confirmed — a refresh token generated under a **Testing** consent screen expires after seven days and fails every later release with an opaque `invalid_grant`. See design.md → "Prerequisite: OAuth consent screen"
+- [x] 0.2 Generate the refresh token **after** 0.1, not before; a token minted under Testing status does not become long-lived when the consent screen is published later
+- [x] 0.3 Add four repository secrets: OAuth client id, client secret, refresh token, and the Chrome Web Store extension id. No signing key — store uploads are plain zips
 - [x] 0.4 Confirm `whats-new-after-update` has landed, so `CHANGELOG.md` and its entry format exist for tasks 3 and 4 to read
 
 ## 1. Close the CI gap that would make the release gate vacuous
