@@ -123,11 +123,21 @@ person who set it up has stopped thinking about it.
 2. Click **Publish app** and confirm.
 3. Confirm the status now reads **In production**.
 
-**Two things people get wrong here:**
+> **Google's own Chrome Web Store API tutorial contradicts this.** It tells you
+> to add your email under **Test users** to skip the approval process, and says
+> nothing about token expiry. Follow that verbatim and you stay in Testing —
+> which is precisely why this failure is so common among people who did
+> everything the documentation told them to. Publish the app instead; you do not
+> need to be a test user of your own project.
+
+**Three things people get wrong here:**
 
 - **Publishing afterwards does not fix an existing token.** A token minted under
   Testing stays short-lived forever. If you already generated one, publish the
   app and then generate a _new_ token — step 5 again.
+- **Adding yourself as a test user is not a substitute.** It removes the
+  approval friction, which is what Google's tutorial is optimising for, but it
+  keeps the app in Testing and therefore keeps the seven-day expiry.
 - **You do not need Google's verification.** Publishing to production will warn
   you that the app uses a sensitive scope and may require verification. That
   applies to distributing the app to other people. You are the only user, so
@@ -145,17 +155,41 @@ exists.
 
 1. Go to **APIs & Services → Credentials**.
 2. **Create Credentials → OAuth client ID**.
-3. Application type: **Desktop app**.
+3. Application type: **Web application**.
 4. Name it (again, something recognisable).
-5. Create. A dialog shows your **Client ID** and **Client secret**.
+5. Under **Authorized redirect URIs**, click **Add URI** and enter exactly:
+
+   ```
+   https://developers.google.com/oauthplayground
+   ```
+
+6. Create. A dialog shows your **Client ID** and **Client secret**.
 
 **Copy both somewhere safe now.** You need them in the next step and in step 7.
 The secret can be retrieved later from the same page, but it is easier not to
 have to.
 
-**Why "Desktop app":** it permits a loopback (`http://localhost`) redirect,
-which is what step 5 uses. A "Web application" client would require you to
-register a redirect URI up front.
+### Why "Web application", and not the types that sound righter
+
+The application type describes **what makes the API calls** — here, a GitHub
+Actions runner talking to Google's REST API. It does not describe what is being
+published.
+
+- **Not "Chrome Extension".** That type is for OAuth happening _inside_ an
+  extension (`chrome.identity.getAuthToken`), where the client is tied to an
+  extension ID and redirects to `https://<extension-id>.chromiumapp.org/`. Our
+  extension never authenticates with anything; it is the payload being
+  uploaded, not the client doing the uploading. This is the most natural wrong
+  guess, because the thing being shipped is a Chrome extension.
+- **Not "Desktop app".** It does work — it allows a `http://localhost` redirect,
+  so you can authorise in a browser and copy the code out of the address bar.
+  But **Web application** is what Google's own Chrome Web Store API
+  documentation specifies, and it is what step 5 uses, so it matches every other
+  guide you are likely to cross-reference.
+
+The redirect URI is required because the OAuth Playground in step 5 is where
+Google sends you back to after you approve. Google only redirects to URIs
+registered here, so a typo produces a `redirect_uri_mismatch` at that point.
 
 ---
 
@@ -168,70 +202,51 @@ workflow can use forever without a browser.
 > Internal)? If not, go back to step 3. Doing this step now produces a token
 > that dies in a week.
 
-### 5a. Build the authorisation URL
+### 5a. Open the OAuth Playground with your own credentials
 
-Replace `YOUR_CLIENT_ID`, then open the result in a browser:
+Go to the
+[OAuth 2.0 Playground](https://developers.google.com/oauthplayground/).
 
-```
-https://accounts.google.com/o/oauth2/v2/auth?client_id=YOUR_CLIENT_ID&redirect_uri=http://localhost&response_type=code&access_type=offline&prompt=consent&scope=https://www.googleapis.com/auth/chromewebstore
-```
+1. Click the **gear icon** (⚙, top right) to open Configuration.
+2. Tick **Use your own OAuth credentials**.
+3. Paste your **Client ID** and **Client secret** from step 4.
+4. Leave the OAuth flow as **Server-side** and close the panel.
 
-Two parameters carry the weight:
+This is Google's own tool, and ticking that box is what makes it authorise
+_your_ client rather than its demo one. Without it you would get a token that
+cannot touch your extension.
 
-- `access_type=offline` — asks for a refresh token, not just a short-lived
-  access token. Without it you get no refresh token at all.
-- `prompt=consent` — forces the consent screen even if you have approved
-  before. Google only returns a refresh token on a fresh consent, so without
-  this a second attempt silently returns none.
+### 5b. Authorise the Chrome Web Store scope
 
-### 5b. Approve, and take the code from the URL bar
+1. In the **Step 1** panel on the left, ignore the API list and paste this
+   scope directly into the "Input your own scopes" box:
 
-- Sign in as the account that owns the extension.
-- If you see "Google hasn't verified this app", click **Advanced → Go to
-  (unsafe)**. Expected — see step 3.
-- Approve the request.
+   ```
+   https://www.googleapis.com/auth/chromewebstore
+   ```
 
-The browser then tries to load `http://localhost/?code=...` and **fails to
-connect**. That is fine and expected: nothing is listening there. What you need
-is in the address bar.
+2. Click **Authorize APIs**.
+3. Sign in as the account that owns the extension.
+4. If you see "Google hasn't verified this app", click **Advanced → Go to
+   (unsafe)**. Expected — see step 3.
+5. Approve the request.
 
-Copy the value of `code=` — everything between `code=` and the next `&`, if
-there is one. It looks like `4/0AVMBsJ...`.
-
-The code is single-use and expires within minutes. If the next step fails with
-`invalid_grant`, the code was already used or has expired — repeat 5a and 5b for
-a fresh one.
+You are returned to the Playground with an authorisation code filled in.
 
 ### 5c. Exchange the code for a refresh token
 
-Fill in the three values and run:
+Click **Exchange authorization code for tokens**.
 
-```bash
-curl -s -X POST https://oauth2.googleapis.com/token \
-  -d "client_id=YOUR_CLIENT_ID" \
-  -d "client_secret=YOUR_CLIENT_SECRET" \
-  -d "code=THE_CODE_FROM_THE_URL_BAR" \
-  -d "grant_type=authorization_code" \
-  -d "redirect_uri=http://localhost"
-```
+The **Refresh token** field now holds a value beginning `1//`. That is what you
+need.
 
-The response contains `refresh_token`:
+The **Access token** beside it is not — it expires in an hour, and the workflow
+mints its own from the refresh token on every run.
 
-```json
-{
-  "access_token": "ya29....",
-  "expires_in": 3599,
-  "refresh_token": "1//0g...",
-  "scope": "https://www.googleapis.com/auth/chromewebstore",
-  "token_type": "Bearer"
-}
-```
-
-**`refresh_token` is what you need.** The `access_token` is not — it lasts an
-hour, and the workflow mints its own from the refresh token each run.
-
-If the response has **no** `refresh_token`, you almost certainly omitted
-`access_type=offline` or `prompt=consent` in 5a. Redo 5a with both.
+**If the refresh token field is empty**, the authorisation did not request
+offline access. Open the gear panel, confirm **Use your own OAuth credentials**
+is still ticked, and repeat 5b — Google only issues a refresh token on a fresh
+consent, so re-approving is what produces one.
 
 Treat this value like a password. It grants publishing rights to your extension
 until revoked, and it is not recoverable — losing it means repeating step 5.
@@ -259,12 +274,12 @@ It also appears on the item's dashboard page, and it matches the ID shown at
 1. Repository → **Settings → Secrets and variables → Actions**.
 2. **New repository secret**, once per row:
 
-| Name                   | Value                              |
-| ---------------------- | ---------------------------------- |
-| `CHROME_CLIENT_ID`     | from step 4                        |
-| `CHROME_CLIENT_SECRET` | from step 4                        |
-| `CHROME_REFRESH_TOKEN` | from step 5c — the `refresh_token` |
-| `CHROME_EXTENSION_ID`  | from step 6                        |
+| Name                   | Value                                      |
+| ---------------------- | ------------------------------------------ |
+| `CHROME_CLIENT_ID`     | from step 4                                |
+| `CHROME_CLIENT_SECRET` | from step 4                                |
+| `CHROME_REFRESH_TOKEN` | from step 5c — the **Refresh token** field |
+| `CHROME_EXTENSION_ID`  | from step 6                                |
 
 Names must match exactly; the workflow reads them by name and refuses to run
 with a message naming any that are missing.
@@ -317,14 +332,24 @@ In order of likelihood:
 3. **Client ID and secret do not belong together**, e.g. copied from two
    different clients or two different projects.
 
-### `invalid_grant` when exchanging the authorisation code (step 5c)
+### `redirect_uri_mismatch` when authorising in the Playground
 
-The code is single-use and short-lived. Get a fresh one: repeat 5a and 5b.
+`https://developers.google.com/oauthplayground` is missing from the client's
+authorised redirect URIs, or has a typo — a trailing slash is enough. Step 4,
+item 5.
 
-### No `refresh_token` in the response
+### The Playground's refresh token field is empty
 
-`access_type=offline` or `prompt=consent` was missing from the authorisation
-URL. Redo 5a with both.
+The authorisation did not produce one. Confirm **Use your own OAuth
+credentials** is still ticked in the gear panel, then authorise again: Google
+issues a refresh token only on a fresh consent, so re-approving is what
+produces one.
+
+### The Playground authorises, but upload later fails with 403 on the scope
+
+The scope box must contain exactly
+`https://www.googleapis.com/auth/chromewebstore`. Selecting an API from the
+list instead of pasting the scope is the usual cause.
 
 ### `403` — API not enabled
 
