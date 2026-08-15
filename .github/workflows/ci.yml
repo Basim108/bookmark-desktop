@@ -1,16 +1,31 @@
 name: CI
 
+# The manifest and lockfile are in these filters because a change touching only
+# them is exactly the kind that most needs checking: a dependency bump decides
+# what every job installs. Without them a bump matched no path, ran no job, and
+# merged unverified — which is how a TypeScript 7 bump that breaks `npm ci`
+# outright reached main twice.
+#
+# CHANGELOG.md is here because a release-bump commit touches these three
+# together, and the release workflow refuses to publish a commit that carries no
+# successful check.
 on:
   pull_request:
     paths:
       - "src/**"
       - "e2e/**"
       - ".github/**"
+      - "package.json"
+      - "package-lock.json"
+      - "CHANGELOG.md"
   push:
     paths:
       - "src/**"
       - "e2e/**"
       - ".github/**"
+      - "package.json"
+      - "package-lock.json"
+      - "CHANGELOG.md"
 
 jobs:
   ci:
