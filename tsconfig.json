@@ -16,11 +16,15 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
+    // scripts/ imports .ts paths directly, which is how Node 24 resolves them
+    // when running the CI guards through native type stripping.
+    "allowImportingTsExtensions": true,
     "types": ["chrome", "vite/client"]
   },
   "include": [
     "src",
     "e2e",
+    "scripts",
     "manifest.config.ts",
     "vite.config.ts",
     "playwright.config.ts"

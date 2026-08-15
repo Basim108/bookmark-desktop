@@ -1,0 +1,243 @@
+name: Release
+
+# Publishes a new version to the Chrome Web Store.
+#
+# Publishing a GitHub release is the only trigger, deliberately: shipping should
+# be one auditable act rather than a side effect of a merge. There is no push,
+# schedule, or dispatch trigger, and no `pull_request` trigger — a workflow that
+# ran on a fork's pull request would hand that fork the publishing credentials.
+#
+# Every guard runs before the upload, so the irreversible step is the last one
+# taken. A version number, once uploaded, cannot be reused.
+#
+# PREREQUISITE, and the most common way this breaks months later: the Google
+# Cloud OAuth consent screen backing these credentials must be Published (or
+# Internal) BEFORE the refresh token is generated. A token minted while the
+# screen is in Testing expires after seven days — the first release succeeds and
+# every later one fails with an opaque `invalid_grant`. Publishing the screen
+# afterwards does not rescue an already-minted token; it must be regenerated.
+# See docs/store-submission.md.
+
+on:
+  release:
+    types: [published]
+
+# Read-only: this workflow publishes to the store, not to the repository.
+permissions:
+  contents: read
+
+# Never let two releases upload to the same item at once.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Build from exactly what was tagged, never from a moving branch.
+          ref: ${{ github.event.release.tag_name }}
+
+      # Guard 1 — the tag and the manifest must name the same version.
+      # manifest.config.ts derives the manifest version from package.json, so
+      # this is the only remaining way the two can disagree. Runs before
+      # anything is installed or built: a mismatched release should cost a few
+      # seconds, not a build.
+      - name: Tag matches the manifest version
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          # Strict format check before the value is used for anything else.
+          # Publishing a release already requires write access, so this is not
+          # the last line of defence — but it turns a typo'd tag into a clear
+          # message instead of a confusing mismatch later.
+          if ! printf '%s' "$TAG_NAME" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Tag ${TAG_NAME} is not a version tag. Expected v1.2.3 (or 1.2.3)."
+            exit 1
+          fi
+          tag_version="${TAG_NAME#v}"
+          pkg_version="$(node -p 'require("./package.json").version')"
+          if [ "$tag_version" != "$pkg_version" ]; then
+            echo "::error::Tag ${TAG_NAME} names version ${tag_version}, but package.json says ${pkg_version}. Bump one to match the other and re-tag."
+            exit 1
+          fi
+          echo "Tag ${TAG_NAME} matches package.json ${pkg_version}."
+          echo "VERSION=${pkg_version}" >> "$GITHUB_ENV"
+
+      # Guard 2 — the tagged commit must already be proven green.
+      #
+      # This workflow runs no tests of its own; it consumes the verdict of the
+      # CI run that already happened. Absence of checks is treated as failure,
+      # not as success: a commit nothing has verified is unproven, and a naive
+      # "no failures found" test would wave it straight through. CI's path
+      # filters cover package.json, package-lock.json, and CHANGELOG.md for
+      # exactly this reason — a release-bump commit touches only those.
+      - name: Tagged commit passed CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          runs="$(gh api "repos/${REPO}/commits/${SHA}/check-runs" --paginate \
+            --jq '.check_runs[] | select(.name != "release") | "\(.name)\t\(.status)\t\(.conclusion)"')"
+
+          if [ -z "$runs" ]; then
+            echo "::error::No check runs found for ${SHA}. An unverified commit is not releasable — absence of checks is not success. Push the commit to a branch so CI runs on it, then re-tag."
+            exit 1
+          fi
+
+          echo "Checks on ${SHA}:"
+          echo "$runs" | sed 's/^/  /'
+
+          if echo "$runs" | awk -F'\t' '$2 != "completed"' | grep -q .; then
+            echo "::error::Some checks on ${SHA} are still running. Wait for CI to finish, then publish the release again."
+            exit 1
+          fi
+          if echo "$runs" | awk -F'\t' '$3 != "success" && $3 != "neutral" && $3 != "skipped"' | grep -q .; then
+            echo "::error::Some checks on ${SHA} did not succeed. Fix them on a branch, merge, and re-tag."
+            exit 1
+          fi
+          echo "All checks on ${SHA} succeeded."
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # Guard 3 — a clean build of the tagged commit. Never a reused dist/.
+      # The build itself fails when CHANGELOG.md carries no readable entry for
+      # this version, so a release cannot ship a "What's new" window that opens
+      # empty.
+      - name: Build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          # A plain zip of dist/ — the store signs the published item itself, so
+          # no signing key is involved anywhere in this workflow. The .crx and
+          # .pem in SECURITY.md are for self-distribution only.
+          cd dist && zip -qr ../extension.zip . && cd ..
+          echo "Packaged $(du -h extension.zip | cut -f1) from dist/."
+
+      # Everything above can refuse the release. Nothing above has touched the
+      # store item. From here on the actions are not reversible.
+      # Upload and submit are one step so the access token never crosses a step
+      # boundary. Passing it via $GITHUB_ENV would expose it to every later
+      # step: values written there are NOT masked the way `secrets.*` are, so a
+      # token parked in the environment can surface in any subsequent log.
+      - name: Upload and submit to the Chrome Web Store
+        env:
+          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+        run: |
+          set -euo pipefail
+          for name in CLIENT_ID CLIENT_SECRET REFRESH_TOKEN EXTENSION_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Repository secret CHROME_${name} is not set. See docs/store-submission.md for what the four secrets are and the order they must be created in."
+              exit 1
+            fi
+          done
+
+          # Exchange the refresh token for an access token. --fail-with-body so
+          # a rejected grant surfaces Google's reason rather than an empty
+          # variable that fails confusingly two steps later.
+          token_response="$(curl -sS --fail-with-body \
+            -d "client_id=${CLIENT_ID}" \
+            -d "client_secret=${CLIENT_SECRET}" \
+            -d "refresh_token=${REFRESH_TOKEN}" \
+            -d "grant_type=refresh_token" \
+            https://oauth2.googleapis.com/token)" || {
+              echo "::error::Could not exchange the refresh token. If this says invalid_grant, the token has most likely expired because the OAuth consent screen was in Testing when it was generated — see docs/store-submission.md."
+              exit 1
+            }
+
+          access_token="$(node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const t=JSON.parse(s).access_token;if(!t){console.error("no access_token in response");process.exit(1)}process.stdout.write(t)})' <<< "$token_response")"
+          # Derived from secrets rather than being one, so it is not masked
+          # automatically. Register it before it can reach any log line.
+          echo "::add-mask::${access_token}"
+
+          upload="$(curl -sS --fail-with-body \
+            -H "Authorization: Bearer ${access_token}" \
+            -H "x-goog-api-version: 2" \
+            -X PUT -T extension.zip \
+            "https://www.googleapis.com/upload/chromewebstore/v1.1/items/${EXTENSION_ID}")"
+          echo "Upload response: ${upload}"
+          node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s);if(r.uploadState==="FAILURE"){console.error("::error::Upload failed: "+JSON.stringify(r.itemError||r));process.exit(1)}})' <<< "$upload"
+
+          # Submitting in the same step keeps the token out of $GITHUB_ENV.
+          publish="$(curl -sS --fail-with-body \
+            -H "Authorization: Bearer ${access_token}" \
+            -H "x-goog-api-version: 2" \
+            -H "Content-Length: 0" \
+            -X POST \
+            "https://www.googleapis.com/chromewebstore/v1.1/items/${EXTENSION_ID}/publish")"
+          echo "Publish response: ${publish}"
+
+      # Submission is not publication. The API returns success on handover;
+      # review is asynchronous, takes hours to days, and can reject. The summary
+      # says "submitted", never "live".
+      - name: Summarise
+        if: success()
+        run: |
+          {
+            echo "### Submitted for review"
+            echo
+            echo "Version **${VERSION}** was uploaded and submitted to the Chrome Web Store."
+            echo
+            echo "This is **not** the same as being live. Review is asynchronous,"
+            echo "usually takes hours to days, and can reject. Watch the Developer"
+            echo "Dashboard for the outcome."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Reporting only. A rejection or a timeout here must not record a
+      # submission that genuinely succeeded as a failed run, so this never
+      # fails the job.
+      - name: Report the review outcome
+        if: success()
+        continue-on-error: true
+        env:
+          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+        run: |
+          set -uo pipefail
+          # A fresh token rather than one carried over from the previous step:
+          # the submission has already succeeded by now, and minting again is
+          # cheaper than parking a credential in the environment for it.
+          token_response="$(curl -sS \
+            -d "client_id=${CLIENT_ID}" \
+            -d "client_secret=${CLIENT_SECRET}" \
+            -d "refresh_token=${REFRESH_TOKEN}" \
+            -d "grant_type=refresh_token" \
+            https://oauth2.googleapis.com/token || true)"
+          access_token="$(node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).access_token||""))}catch{process.stdout.write("")}})' <<< "$token_response" || true)"
+          if [ -n "$access_token" ]; then echo "::add-mask::${access_token}"; fi
+
+          for _ in $(seq 1 10); do
+            sleep 60
+            item="$(curl -sS \
+              -H "Authorization: Bearer ${access_token}" \
+              -H "x-goog-api-version: 2" \
+              "https://www.googleapis.com/chromewebstore/v1.1/items/${EXTENSION_ID}?projection=DRAFT" || true)"
+            state="$(node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).status||""))}catch{process.stdout.write("")}})' <<< "$item" || true)"
+            echo "Review state: ${state:-unknown}"
+            case "$state" in
+              *REJECTED*)
+                echo "::warning::The store reported a rejection. The submission itself succeeded; check the Developer Dashboard for the reason."
+                exit 0 ;;
+              *PUBLISHED*|*OK*)
+                echo "Review completed."
+                exit 0 ;;
+            esac
+          done
+          echo "Still in review after 10 minutes — this is normal. Check the Developer Dashboard."

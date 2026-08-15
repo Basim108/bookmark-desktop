@@ -6,6 +6,9 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.test.{ts,tsx}"],
+    // scripts/ holds the CI guards, which are plain TypeScript run by
+    // Node 24's native type stripping. They are covered here so a guard cannot
+    // rot unnoticed.
+    include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.ts"],
   },
 });
