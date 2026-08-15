@@ -16,7 +16,9 @@ name: Release
 # screen is in Testing expires after seven days — the first release succeeds and
 # every later one fails with an opaque `invalid_grant`. Publishing the screen
 # afterwards does not rescue an already-minted token; it must be regenerated.
-# See docs/store-submission.md.
+#
+# Full setup guide, including how to generate the token and add the secrets:
+# docs/release-credentials.md
 
 on:
   release:
@@ -142,7 +144,7 @@ jobs:
           set -euo pipefail
           for name in CLIENT_ID CLIENT_SECRET REFRESH_TOKEN EXTENSION_ID; do
             if [ -z "${!name}" ]; then
-              echo "::error::Repository secret CHROME_${name} is not set. See docs/store-submission.md for what the four secrets are and the order they must be created in."
+              echo "::error::Repository secret CHROME_${name} is not set. See docs/release-credentials.md for how to obtain all four and the order they must be created in."
               exit 1
             fi
           done
@@ -156,7 +158,7 @@ jobs:
             -d "refresh_token=${REFRESH_TOKEN}" \
             -d "grant_type=refresh_token" \
             https://oauth2.googleapis.com/token)" || {
-              echo "::error::Could not exchange the refresh token. If this says invalid_grant, the token has most likely expired because the OAuth consent screen was in Testing when it was generated — see docs/store-submission.md."
+              echo "::error::Could not exchange the refresh token. If this says invalid_grant, the token has most likely expired because the OAuth consent screen was in Testing when it was generated — see the troubleshooting section of docs/release-credentials.md."
               exit 1
             }
 

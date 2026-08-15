@@ -161,6 +161,11 @@ zips `dist/`, uploads it to the store item, and submits it for review.
 
 ### The one-time setup that everything else depends on
 
+**[`release-credentials.md`](./release-credentials.md) is the step-by-step
+guide** — Google Cloud project, consent screen, OAuth client, refresh token, and
+the four secrets, with the reasoning for each. Follow it once before the first
+automated release. The summary below is why its ordering matters.
+
 **Publish the OAuth consent screen before generating the refresh token.**
 
 This is the single most common way Chrome Web Store automation dies, and it
@@ -202,7 +207,8 @@ only available safeguard.
 | `CHROME_REFRESH_TOKEN` | Long-lived refresh token — generate it _after_ the step above |
 | `CHROME_EXTENSION_ID`  | The item's id from the Developer Dashboard URL                |
 
-No signing key. See "Assets and package" above.
+No signing key. See "Assets and package" above. Where each value comes from, and
+how to obtain it, is in [`release-credentials.md`](./release-credentials.md).
 
 ### Cutting a release
 
