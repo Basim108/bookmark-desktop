@@ -14,6 +14,21 @@ updates:
    directory: "/"
    schedule:
      interval: weekly
+   ignore:
+     # TypeScript 7 is held back by typescript-eslint, which gates `npm run
+     # lint` and therefore CI. Every published version of it — 8.67.0 included,
+     # not just the one pinned here — declares `peer typescript ">=4.8.4
+     # <6.1.0"`, so a 7.x root dependency makes `npm ci` fail outright with
+     # ERESOLVE. Nothing installs, so no job runs at all.
+     #
+     # This bump has landed and been reverted twice (7fd9bb1, then aac8883).
+     # Neither revert recorded a reason, so it was proposed again and merged
+     # again. This entry is that record, and stops the third attempt.
+     #
+     # Lift it once typescript-eslint ships a release whose typescript peer
+     # range admits 7.x, and bump both together.
+     - dependency-name: "typescript"
+       versions: ["7.x"]
  - package-ecosystem: "github-actions"
    directory: "/"
    schedule:
