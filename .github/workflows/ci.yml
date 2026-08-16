@@ -19,11 +19,14 @@ on:
       - "package-lock.json"
       - "CHANGELOG.md"
   push:
-    # Branch pushes only. A tag push re-runs the whole suite against a commit
-    # CI has already judged, and those duplicate runs are what a release's
-    # green-CI gate then has to wait out — the release is published seconds
-    # after the tag.
-    tags-ignore: ["**"]
+    # Branches only, so a tag push does not re-run the whole suite against a
+    # commit CI has already judged — those duplicate runs are what a release's
+    # green-CI gate then has to wait out.
+    #
+    # This must be `branches`, NOT `tags-ignore`. Defining only a tag filter
+    # makes GitHub stop matching branch pushes altogether, which silently
+    # disables CI on every push rather than just on tags.
+    branches: ["**"]
     paths:
       - "src/**"
       - "e2e/**"
