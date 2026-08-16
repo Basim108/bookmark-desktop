@@ -123,9 +123,13 @@ helps review go smoothly:
 
 - Screenshot (1280×800) and promo tile (440×280): `store-assets/` — regenerate
   with `npm run build && npm run assets:store`.
-- Upload `dist/` as a zip, or a packed `.crx`. Follow `SECURITY.md` for signing
-  key handling: move the `.pem` to a vault immediately after packing, and never
-  commit it.
+- The store package is a **plain zip of `dist/`**, and **no signing key is
+  involved**: Google signs the published item itself. Releases are automated
+  (see below), so this is normally not done by hand at all.
+- The `.crx` and `.pem` guidance in `SECURITY.md` is for **self-distribution**
+  — hosting the extension outside the store — and does not apply to a store
+  submission. Don't go looking for somewhere to put a signing key in the
+  release workflow; there isn't one, by design.
 
 ## How the privacy policy is hosted
 
@@ -148,3 +152,107 @@ Notes on the setup:
   tab (`workflow_dispatch`).
 - To change the policy, edit `PRIVACY.md` and merge to `main`. Don't edit a
   copy under `site/` — there isn't one, by design.
+
+## Releasing a new version
+
+Publishing a GitHub release is the only thing that ships a version.
+`.github/workflows/release.yml` does the rest: it builds the tagged commit,
+zips `dist/`, uploads it to the store item, and submits it for review.
+
+### The one-time setup that everything else depends on
+
+**[`release-credentials.md`](./release-credentials.md) is the step-by-step
+guide** — Google Cloud project, consent screen, OAuth client, refresh token, and
+the four secrets, with the reasoning for each. Follow it once before the first
+automated release. The summary below is why its ordering matters.
+
+**Publish the OAuth consent screen before generating the refresh token.**
+
+This is the single most common way Chrome Web Store automation dies, and it
+fails months later in a way that looks like anything but its actual cause.
+
+If the Google Cloud project's OAuth consent screen is in **Testing** status,
+Google expires refresh tokens after **seven days**. The first release works.
+A release a week later fails with:
+
+```
+invalid_grant
+```
+
+— with nothing to suggest that the credential, rather than the workflow, is at
+fault. Searching for `invalid_grant` is how a future maintainer is most likely
+to arrive at this paragraph, which is why the string is written out here.
+
+Publishing the consent screen **after** the token was minted does not rescue
+it. A token generated under Testing status stays short-lived; it has to be
+regenerated once the screen is Published (or Internal, for a Workspace
+organization).
+
+So, in this order:
+
+1. Set the consent screen to **Published** or **Internal**.
+2. _Then_ generate the refresh token.
+3. Add the four repository secrets below.
+
+No workflow step can check this in advance — a seven-day-old token is
+indistinguishable from a permanent one until it expires — so this note is the
+only available safeguard.
+
+### Repository secrets
+
+| Secret                 | What it is                                                    |
+| ---------------------- | ------------------------------------------------------------- |
+| `CHROME_CLIENT_ID`     | OAuth client id from the Google Cloud project                 |
+| `CHROME_CLIENT_SECRET` | OAuth client secret                                           |
+| `CHROME_REFRESH_TOKEN` | Long-lived refresh token — generate it _after_ the step above |
+| `CHROME_EXTENSION_ID`  | The item's id from the Developer Dashboard URL                |
+
+No signing key. See "Assets and package" above. Where each value comes from, and
+how to obtain it, is in [`release-credentials.md`](./release-credentials.md).
+
+### Cutting a release
+
+1. Open a bump pull request: the new version in `package.json`, and its entry
+   in `CHANGELOG.md` written for users. If any commit since the last tag
+   records a breaking change, CI requires that entry to carry a heads-up line
+   (`scripts/check-breaking-change.ts`) — it is far cheaper to add one here
+   than after a version number has been spent.
+2. Merge it, and let CI go green on `main`.
+3. Tag the merge commit `v<version>` — for example `v1.2.0` — and push the tag.
+4. Publish a GitHub release for that tag. Its body is generated for
+   contributors from the commit history (`.github/release.yml`); the
+   user-facing account is `CHANGELOG.md` and the two are deliberately separate.
+5. Watch the workflow through to "Submitted for review".
+
+### What can refuse a release
+
+Every one of these runs _before_ anything is uploaded, so a refused release
+costs a workflow run and nothing else:
+
+- The tag is not a version tag, or names a different version than
+  `package.json`. The leading `v` is stripped before comparing.
+- The tagged commit's checks did not all succeed.
+- The tagged commit has **no** checks at all. Absence of checks is treated as
+  failure, not success — an unverified commit is not releasable. (CI's path
+  filters include `package.json`, `package-lock.json`, and `CHANGELOG.md` so
+  that a bump commit does produce checks; without them it would match no path
+  and produce none.)
+- `CHANGELOG.md` has no readable entry for the version being built, which fails
+  the build itself — a release cannot ship a "What's new" window that opens
+  empty.
+
+### Submitted is not published
+
+The API returns success when the package is **handed over**. Review is
+asynchronous, usually takes hours to days, and can reject. A green workflow
+means "submitted", which is what the job summary says. Watch the Developer
+Dashboard for the outcome; the workflow also polls for a few minutes and
+reports what it sees, but never fails a genuine submission over it.
+
+### If a run fails between upload and publish
+
+The store will not accept a re-upload of a version it already has, so
+re-running the workflow will fail with a 400. The already-uploaded draft is
+sitting in the Developer Dashboard — **publish it from there** rather than
+trying to make the workflow do it again. Only if the draft itself is wrong does
+the version number need to be burned and a new one cut.

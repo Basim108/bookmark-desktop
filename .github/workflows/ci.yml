@@ -32,11 +32,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The breaking-change guard reads the commits since the previous tag,
+          # so it needs the tags and the history behind them. The default
+          # shallow, tagless checkout would make `git describe` fail and the
+          # guard silently treat every commit as in range.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
+
+      # Runs before install because it needs neither: Node 24 strips the types
+      # natively and the guard reads only git and two files. A missing heads-up
+      # therefore fails in seconds rather than after the whole suite.
+      - name: Breaking changes are announced to users
+        run: node scripts/check-breaking-change.ts
 
       - name: Install dependencies
         run: npm ci

@@ -1,0 +1,41 @@
+# Shapes the notes GitHub generates for a release.
+#
+# This body is for **contributors**, and is the counterpart to CHANGELOG.md,
+# which is for users. The split is deliberate: a contributor bisecting a
+# regression wants every commit including the dependency bumps — they were 21 of
+# the 61 commits between 1.0.0 and 1.1.0 — while a user wants four sentences and
+# no mention of a lockfile. Trying to serve both audiences from one document is
+# what made the format awkward, so neither is derived from the other.
+#
+# Dependency updates are therefore categorised rather than excluded. Only the
+# repository's own bookkeeping is dropped: OpenSpec archival commits record how
+# the work was tracked, not what changed in the extension.
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+  categories:
+    - title: Features
+      labels:
+        - "*"
+      # Conventional-commit types are not labels, so a PR reaches the right
+      # category by carrying one of these. An unlabelled PR falls through to
+      # "Other changes" rather than disappearing.
+      exclude:
+        labels:
+          - bug
+          - dependencies
+          - documentation
+          - chore
+    - title: Fixes
+      labels:
+        - bug
+    - title: Dependencies
+      labels:
+        - dependencies
+    - title: Documentation
+      labels:
+        - documentation
+    - title: Other changes
+      labels:
+        - "*"
