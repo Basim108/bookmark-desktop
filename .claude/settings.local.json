@@ -55,7 +55,9 @@
       "Bash(openspec change *)",
       "Bash(git stash *)",
       "Skill(commit-commands:commit-push-pr)",
-      "Bash(git pull *)"
+      "Bash(git pull *)",
+      "Bash(gh --version)",
+      "Bash(gh api *)"
     ]
   }
 }
