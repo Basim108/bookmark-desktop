@@ -48,10 +48,10 @@
 - [x] 6.2 Include the heads-up line for the layout reflow — the storage-slot migration is the one breaking change in this release, and task 3 will require it
 - [x] 6.3 Confirm `1.1.0` is right rather than `2.0.0`: nothing breaks for a user, the data migrates on read, and the visible consequence is a one-time reflow (design.md Decision 6)
 - [x] 6.4 Merge, tag `v1.1.0`, publish the release, and watch the workflow through to submission
-- [ ] 6.5 Verify the submission appears in the Developer Dashboard, and that the shipped bundle carries the `1.1.0` changelog entry the extension will show
+- [x] 6.5 Verify the submission appears in the Developer Dashboard, and that the shipped bundle carries the `1.1.0` changelog entry the extension will show
 
 ## 7. Verification
 
-- [ ] 7.1 Verify each refusal path deliberately: a mismatched tag, a commit with a failed check, and a commit with no checks at all each fail **before** any upload
+- [x] 7.1 Verify each refusal path deliberately: a mismatched tag, a commit with a failed check, and a commit with no checks at all each fail **before** any upload
 - [x] 7.2 Verify the breaking-change guard fails a bump PR whose changelog entry omits a required heads-up
 - [x] 7.3 Run `openspec validate release-to-web-store --strict` and confirm it passes
