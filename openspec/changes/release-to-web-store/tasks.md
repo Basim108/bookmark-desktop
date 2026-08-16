@@ -47,7 +47,7 @@
 - [x] 6.1 Author the `1.1.0` bump PR: `package.json` version, and a `CHANGELOG.md` entry condensing 61 commits into four or five user-facing lines with the bug fixes rolled into one sentence — **done ahead of this change, in `whats-new-after-update`**: its build guard needs an entry matching the built version, so the bump and the entry landed with the feature that reads them
 - [x] 6.2 Include the heads-up line for the layout reflow — the storage-slot migration is the one breaking change in this release, and task 3 will require it
 - [x] 6.3 Confirm `1.1.0` is right rather than `2.0.0`: nothing breaks for a user, the data migrates on read, and the visible consequence is a one-time reflow (design.md Decision 6)
-- [ ] 6.4 Merge, tag `v1.1.0`, publish the release, and watch the workflow through to submission
+- [x] 6.4 Merge, tag `v1.1.0`, publish the release, and watch the workflow through to submission
 - [ ] 6.5 Verify the submission appears in the Developer Dashboard, and that the shipped bundle carries the `1.1.0` changelog entry the extension will show
 
 ## 7. Verification
