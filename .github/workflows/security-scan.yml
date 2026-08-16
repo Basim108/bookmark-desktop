@@ -2,6 +2,8 @@ name: Security Scan
 
 on:
   push:
+    # Same reason as ci.yml: a tag push would re-scan an already-scanned commit.
+    tags-ignore: ["**"]
     paths:
       - "src/**"
       - ".github/**"

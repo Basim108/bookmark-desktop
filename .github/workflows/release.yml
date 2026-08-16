@@ -77,6 +77,19 @@ jobs:
       # "no failures found" test would wave it straight through. CI's path
       # filters cover package.json, package-lock.json, and CHANGELOG.md for
       # exactly this reason — a release-bump commit touches only those.
+      #
+      # Two subtleties, both learned by this step failing a real release:
+      #
+      # A commit can carry SEVERAL runs of the same check — a re-run, or a
+      # second trigger — so the runs are grouped by name and only the newest of
+      # each is judged. Judging all of them lets a stale or superseded run block
+      # a commit that is actually green.
+      #
+      # And an in-progress check is waited for, not failed on. The first attempt
+      # at this failed twelve seconds after a duplicate CI run started, on a
+      # commit whose CI had already passed. Refusing to release is right when a
+      # check has failed; refusing because one is still running just loses a
+      # race with work that was already done.
       - name: Tagged commit passed CI
         env:
           GH_TOKEN: ${{ github.token }}
@@ -84,22 +97,37 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          runs="$(gh api "repos/${REPO}/commits/${SHA}/check-runs" --paginate \
-            --jq '.check_runs[] | select(.name != "release") | "\(.name)\t\(.status)\t\(.conclusion)"')"
 
-          if [ -z "$runs" ]; then
+          # Newest run of each distinct check name, excluding this workflow's
+          # own check, which is in progress by definition while it runs.
+          latest_checks() {
+            gh api "repos/${REPO}/commits/${SHA}/check-runs" --paginate --slurp \
+              --jq '[.[].check_runs[]]
+                    | map(select(.name != "release"))
+                    | group_by(.name)
+                    | map(sort_by(.started_at) | last)'
+          }
+
+          for _ in $(seq 1 45); do
+            latest="$(latest_checks)"
+            pending="$(jq -r '[.[] | select(.status != "completed")] | length' <<< "$latest")"
+            [ "$pending" = "0" ] && break
+            echo "Waiting for ${pending} check(s) still running on ${SHA}…"
+            sleep 20
+          done
+
+          echo "Checks on ${SHA}:"
+          jq -r '.[] | "  \(.name)\t\(.status)\t\(.conclusion)"' <<< "$latest"
+
+          if [ "$(jq -r 'length' <<< "$latest")" = "0" ]; then
             echo "::error::No check runs found for ${SHA}. An unverified commit is not releasable — absence of checks is not success. Push the commit to a branch so CI runs on it, then re-tag."
             exit 1
           fi
-
-          echo "Checks on ${SHA}:"
-          echo "$runs" | sed 's/^/  /'
-
-          if echo "$runs" | awk -F'\t' '$2 != "completed"' | grep -q .; then
-            echo "::error::Some checks on ${SHA} are still running. Wait for CI to finish, then publish the release again."
+          if [ "$(jq -r '[.[] | select(.status != "completed")] | length' <<< "$latest")" != "0" ]; then
+            echo "::error::Checks on ${SHA} were still running after 15 minutes. Wait for CI to finish, then re-run this workflow."
             exit 1
           fi
-          if echo "$runs" | awk -F'\t' '$3 != "success" && $3 != "neutral" && $3 != "skipped"' | grep -q .; then
+          if [ "$(jq -r '[.[] | select(.conclusion != "success" and .conclusion != "neutral" and .conclusion != "skipped")] | length' <<< "$latest")" != "0" ]; then
             echo "::error::Some checks on ${SHA} did not succeed. Fix them on a branch, merge, and re-tag."
             exit 1
           fi

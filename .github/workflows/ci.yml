@@ -19,6 +19,11 @@ on:
       - "package-lock.json"
       - "CHANGELOG.md"
   push:
+    # Branch pushes only. A tag push re-runs the whole suite against a commit
+    # CI has already judged, and those duplicate runs are what a release's
+    # green-CI gate then has to wait out — the release is published seconds
+    # after the tag.
+    tags-ignore: ["**"]
     paths:
       - "src/**"
       - "e2e/**"
