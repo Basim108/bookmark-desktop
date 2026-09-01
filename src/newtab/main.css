@@ -197,8 +197,254 @@ body {
 }
 
 .grid-cell--occupied:hover .bookmark-icon-settings-toggle,
-.bookmark-icon-settings-toggle:focus-visible {
+.bookmark-icon-settings-toggle:focus-visible,
+.bookmark-icon-settings-toggle.is-open {
   opacity: 1;
+}
+
+.bookmark-action-menu {
+  position: fixed;
+  z-index: 120;
+  width: 156px;
+  padding: 5px;
+  color: light-dark(#1a1a1a, #f0f0f0);
+  background: light-dark(rgb(255 255 255 / 20%), rgb(43 43 43 / 60%));
+  border: 1px solid light-dark(#d4d4d4, #505050);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+}
+
+.bookmark-action-menu button {
+  width: 100%;
+  padding: 8px 10px;
+  color: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.bookmark-action-menu button:hover,
+.bookmark-action-menu button:focus-visible {
+  background: light-dark(#e8f2ff, #174f82);
+  outline: none;
+}
+
+.bookmark-action-menu-separator {
+  height: 1px;
+  margin: 5px 4px;
+  background: light-dark(#d8d8d8, #555);
+}
+
+.bookmark-folder-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 50%);
+}
+
+.bookmark-folder-picker-window {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  max-height: min(680px, calc(100vh - 32px));
+  color: light-dark(#1a1a1a, #f0f0f0);
+  background: light-dark(#fff, #2b2b2b);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgb(0 0 0 / 40%);
+  overflow: hidden;
+}
+
+.bookmark-folder-picker-titlebar,
+.bookmark-folder-picker-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+}
+
+.bookmark-folder-picker-titlebar {
+  min-height: 48px;
+  border-bottom: 1px solid light-dark(#e2e2e2, #3d3d3d);
+}
+
+.bookmark-folder-picker-titlebar h2 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 1rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookmark-folder-picker-titlebar button {
+  width: 32px;
+  height: 32px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.bookmark-folder-picker-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+}
+
+.bookmark-folder-picker-body label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.bookmark-folder-picker-body input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  color: inherit;
+  font: inherit;
+  background: light-dark(#fff, #1f1f1f);
+  border: 1px solid light-dark(#aaa, #666);
+  border-radius: 6px;
+}
+
+.bookmark-folder-picker-body input:focus-visible,
+.bookmark-folder-picker-window button:focus-visible {
+  outline: 2px solid #4b9fff;
+  outline-offset: 2px;
+}
+
+.bookmark-folder-picker-list {
+  min-height: 180px;
+  overflow: auto;
+  padding: 5px;
+  background: light-dark(#fafafa, #222);
+  border: 1px solid light-dark(#d4d4d4, #505050);
+  border-radius: 6px;
+}
+
+.bookmark-folder-picker-row {
+  display: flex;
+  align-items: center;
+  min-width: max-content;
+}
+
+.bookmark-folder-picker-expand,
+.bookmark-folder-picker-spacer {
+  width: 28px;
+  height: 32px;
+  flex: 0 0 28px;
+}
+
+.bookmark-folder-picker-expand,
+.bookmark-folder-picker-choice,
+.bookmark-folder-picker-result {
+  color: inherit;
+  font: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.bookmark-folder-picker-choice {
+  min-width: 160px;
+  flex: 1;
+  padding: 7px 9px;
+  text-align: left;
+}
+
+.bookmark-folder-picker-result {
+  display: block;
+  width: 100%;
+  padding: 9px 10px;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookmark-folder-picker-choice:hover,
+.bookmark-folder-picker-result:hover,
+.bookmark-folder-picker-choice.is-selected,
+.bookmark-folder-picker-result.is-selected {
+  background: light-dark(#e8f2ff, #174f82);
+}
+
+.bookmark-folder-picker-empty,
+.bookmark-folder-picker-hint,
+.bookmark-folder-picker-error {
+  margin: 6px 4px;
+  font-size: 0.85rem;
+}
+
+.bookmark-folder-picker-empty,
+.bookmark-folder-picker-hint {
+  color: light-dark(#555, #bbb);
+}
+
+.bookmark-folder-picker-error {
+  color: light-dark(#b42318, #ff9a90);
+}
+
+.bookmark-folder-picker-actions {
+  justify-content: flex-end;
+  border-top: 1px solid light-dark(#e2e2e2, #3d3d3d);
+}
+
+.bookmark-folder-picker-actions button {
+  min-width: 84px;
+  padding: 8px 14px;
+  color: inherit;
+  font: inherit;
+  background: light-dark(#eee, #414141);
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.bookmark-folder-picker-actions button:last-child {
+  color: #fff;
+  background: #247ac1;
+}
+
+.bookmark-folder-picker-window button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@media (max-width: 480px) {
+  .bookmark-folder-picker-backdrop {
+    align-items: stretch;
+  }
+
+  .bookmark-folder-picker-window {
+    max-height: none;
+    border: 1px solid light-dark(#d4d4d4, #505050);
+    box-shadow: none;
+  }
+
+  .bookmark-folder-picker-titlebar,
+  .bookmark-folder-picker-body,
+  .bookmark-folder-picker-actions {
+    padding-inline: 16px;
+  }
 }
 
 .icon-upload-controls {

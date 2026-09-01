@@ -3,6 +3,7 @@ import { installChromeMock } from "../../test/chromeMock";
 import {
   DEFAULT_BOOKMARK_SETTINGS,
   getBookmarkSettings,
+  setBookmarkSettings,
   removeBookmarkSettings,
   replaceAllBookmarkSettings,
   setBookmarkHasCustomIcon,
@@ -18,6 +19,20 @@ beforeEach(() => {
 describe("getBookmarkSettings", () => {
   it("returns the default (under-icon label, no icon) when nothing is stored", async () => {
     expect(await getBookmarkSettings("b1")).toEqual(DEFAULT_BOOKMARK_SETTINGS);
+  });
+});
+
+describe("setBookmarkSettings", () => {
+  it("stores the complete record, including fields unknown to copy callers", async () => {
+    const settings = {
+      labelDisplay: "tooltip" as const,
+      hasCustomIcon: true,
+      futureColor: "violet",
+    };
+
+    await setBookmarkSettings("b1", settings);
+
+    expect(await getBookmarkSettings("b1")).toEqual(settings);
   });
 });
 

@@ -47,7 +47,10 @@ test("uploading a custom icon in the Edit Bookmark window replaces the favicon o
     page.getByRole("img", { name: "Icon Upload Bookmark" }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Edit Icon Upload Bookmark" }).click();
+  await page
+    .getByRole("button", { name: "Actions for Icon Upload Bookmark" })
+    .click();
+  await page.getByRole("menuitem", { name: "Settings" }).click();
   const dialog = page.getByRole("dialog", { name: "Edit Bookmark" });
   await dialog.getByLabel("Upload image").setInputFiles(TINY_PNG_PATH);
 
@@ -69,7 +72,10 @@ test("uploading a custom icon in the Edit Bookmark window replaces the favicon o
     page.getByRole("img", { name: "Icon Upload Bookmark" }),
   ).toHaveAttribute("src", /^blob:/);
 
-  await page.getByRole("button", { name: "Edit Icon Upload Bookmark" }).click();
+  await page
+    .getByRole("button", { name: "Actions for Icon Upload Bookmark" })
+    .click();
+  await page.getByRole("menuitem", { name: "Settings" }).click();
   await dialog.getByRole("button", { name: "Remove image" }).click();
   await dialog.getByRole("button", { name: "Save" }).click();
 
@@ -95,7 +101,10 @@ test("uploading an SVG is rejected with an inline error, and the favicon is left
   });
   await page.reload();
 
-  await page.getByRole("button", { name: "Edit SVG Reject Bookmark" }).click();
+  await page
+    .getByRole("button", { name: "Actions for SVG Reject Bookmark" })
+    .click();
+  await page.getByRole("menuitem", { name: "Settings" }).click();
   const dialog = page.getByRole("dialog", { name: "Edit Bookmark" });
   await dialog.getByLabel("Upload image").setInputFiles(TINY_SVG_PATH);
 

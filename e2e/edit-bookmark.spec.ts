@@ -18,7 +18,10 @@ test("editing name and URL in the window updates the bookmark on Save", async ({
   });
   await page.reload();
 
-  await page.getByRole("button", { name: "Edit Editable Bookmark" }).click();
+  await page
+    .getByRole("button", { name: "Actions for Editable Bookmark" })
+    .click();
+  await page.getByRole("menuitem", { name: "Settings" }).click();
   const dialog = page.getByRole("dialog", { name: "Edit Bookmark" });
   await dialog.getByLabel("Name").fill("Renamed Bookmark");
   await dialog.getByLabel("URL").fill("https://new.example.com/");
@@ -50,7 +53,8 @@ test("closing the window without saving discards edits", async ({
   });
   await page.reload();
 
-  await page.getByRole("button", { name: "Edit Keep Me" }).click();
+  await page.getByRole("button", { name: "Actions for Keep Me" }).click();
+  await page.getByRole("menuitem", { name: "Settings" }).click();
   const dialog = page.getByRole("dialog", { name: "Edit Bookmark" });
   await dialog.getByLabel("Name").fill("Discarded Name");
   await dialog.getByRole("button", { name: "Close" }).click();
@@ -80,7 +84,10 @@ test("Remove deletes the bookmark from the canvas and Chrome after confirmation"
     page.getByRole("img", { name: "Removable Bookmark" }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Edit Removable Bookmark" }).click();
+  await page
+    .getByRole("button", { name: "Actions for Removable Bookmark" })
+    .click();
+  await page.getByRole("menuitem", { name: "Settings" }).click();
   const dialog = page.getByRole("dialog", { name: "Edit Bookmark" });
   await dialog.getByRole("button", { name: "Remove" }).click();
   await dialog.getByRole("button", { name: "Confirm remove" }).click();
