@@ -22,6 +22,9 @@ bookmark store.
 - Default icon is the URL's favicon (with a generic fallback); custom
   icons can be uploaded per bookmark/folder
 - Per-bookmark label display (under the icon, or tooltip-only)
+- Each bookmark's gear offers searchable `Copy To...` and `Move To...`
+  actions for any other folder, while copied bookmarks keep their name, URL,
+  custom icon, and settings but receive a fresh grid position
 - Layout and structure changes stay in sync live across every open new-tab
   page, and across changes made in Chrome's native bookmark manager
 

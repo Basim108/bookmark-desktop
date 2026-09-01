@@ -82,7 +82,7 @@ describe("BookmarkIcon", () => {
     expect(screen.getByTitle("Bookmark b1")).toBeInTheDocument();
   });
 
-  it("opens the Edit Bookmark window from the gear button", async () => {
+  it("opens the action menu from the gear and settings from its Settings item", async () => {
     const user = userEvent.setup();
     renderIcon(bookmarkNode("b1"));
 
@@ -90,10 +90,50 @@ describe("BookmarkIcon", () => {
       screen.queryByRole("dialog", { name: "Edit Bookmark" }),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Edit Bookmark b1" }));
+    await user.click(
+      screen.getByRole("button", { name: "Actions for Bookmark b1" }),
+    );
+
+    expect(
+      screen.getByRole("menu", { name: "Bookmark actions" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("menuitem", { name: "Settings" }));
 
     expect(
       screen.getByRole("dialog", { name: "Edit Bookmark" }),
     ).toBeInTheDocument();
+  });
+
+  it("opens a searchable destination window from Copy To", async () => {
+    const user = userEvent.setup();
+    mock.addNode({
+      id: "1",
+      parentId: "0",
+      index: 0,
+      title: "Bookmarks Bar",
+      syncing: false,
+    });
+    mock.addNode({
+      id: "2",
+      parentId: "0",
+      index: 1,
+      title: "Other Bookmarks",
+      syncing: false,
+    });
+    renderIcon(bookmarkNode("b1"));
+
+    await user.click(
+      screen.getByRole("button", { name: "Actions for Bookmark b1" }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: "Copy To..." }));
+
+    expect(
+      await screen.findByRole("dialog", {
+        name: "Copy “Bookmark b1” to folder",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("searchbox", { name: "Search folders" }),
+    ).toBeVisible();
   });
 });

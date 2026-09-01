@@ -216,7 +216,7 @@ test("Import uTab downloads a per-entry report file for skipped entries", async 
 
   const rescued = page.locator(".bookmark-icon-wrapper", {
     has: page.getByRole("button", {
-      name: "Edit https://example.com/untitled/deep/path",
+      name: "Actions for https://example.com/untitled/deep/path",
     }),
   });
   await expect(rescued).toBeVisible();
@@ -227,7 +227,7 @@ test("Import uTab downloads a per-entry report file for skipped entries", async 
   );
   // A titled sibling still shows its label, so the tooltip mode is targeted.
   const keeper = page.locator(".bookmark-icon-wrapper", {
-    has: page.getByRole("button", { name: "Edit Keeper" }),
+    has: page.getByRole("button", { name: "Actions for Keeper" }),
   });
   await expect(keeper.locator(".bookmark-icon-label")).toHaveText("Keeper");
 });

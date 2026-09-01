@@ -39,6 +39,8 @@ it did more than a user wants to read about.
   you want
 - Carry a bookmark across pages in one drag, with the canvas turning as you go
 - Find your last open folder already waiting whenever you open a new tab
+- Copy or move a bookmark to any folder from its gear menu, with folder search
+  when the tree is long
 
 Alongside these, a number of fixes and refinements to icon layout, grid sizing,
 and the settings windows.
