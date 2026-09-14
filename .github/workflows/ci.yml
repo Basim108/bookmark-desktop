@@ -10,14 +10,6 @@ name: CI
 # together, and the release workflow refuses to publish a commit that carries no
 # successful check.
 on:
-  pull_request:
-    paths:
-      - "src/**"
-      - "e2e/**"
-      - ".github/**"
-      - "package.json"
-      - "package-lock.json"
-      - "CHANGELOG.md"
   push:
     # Branches only, so a tag push does not re-run the whole suite against a
     # commit CI has already judged — those duplicate runs are what a release's
