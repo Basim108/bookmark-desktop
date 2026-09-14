@@ -21,6 +21,18 @@ export async function getBookmarkSettings(
   return all[bookmarkId] ?? DEFAULT_BOOKMARK_SETTINGS;
 }
 
+/** Writes a bookmark's complete settings record so future fields copy intact. */
+export async function setBookmarkSettings(
+  bookmarkId: string,
+  settings: BookmarkSettings,
+): Promise<void> {
+  const all = await getAllBookmarkSettings();
+  await setStorageValue(STORAGE_KEYS.BOOKMARK_SETTINGS, {
+    ...all,
+    [bookmarkId]: settings,
+  });
+}
+
 /** Sets a bookmark's label display mode (under-icon vs. tooltip-only). Independent per bookmark — no inheritance. */
 export async function setBookmarkLabelDisplay(
   bookmarkId: string,
