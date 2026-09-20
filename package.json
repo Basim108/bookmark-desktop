@@ -44,7 +44,7 @@
     "@resvg/resvg-js": "^2.6.2",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
-    "@testing-library/user-event": "^14.6.4",
+    "@testing-library/user-event": "^14.6.7",
     "@types/chrome": "^0.2.9",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
@@ -62,8 +62,8 @@
     "prettier": "^3.9.6",
     "retire": "^5.7.0",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.67.0",
-    "vite": "^8.2.2",
+    "typescript-eslint": "^8.70.0",
+    "vite": "^8.3.0",
     "vitest": "^4.1.11"
   },
   "lint-staged": {
