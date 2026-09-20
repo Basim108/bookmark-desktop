@@ -11,7 +11,8 @@
       "version": "3.12",
       "installTools": false
     },
-    "ghcr.io/devcontainers-extra/features/claude-code:2": {}
+    "ghcr.io/devcontainers-extra/features/claude-code:2": {},
+    "ghcr.io/dirien/devcontainer-feature-codex/codex:0": {}
   },
   "customizations": {
     "vscode": {
