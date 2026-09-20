@@ -27,6 +27,15 @@ An optional closing sentence rolling up the bug fixes. Never enumerate them.
 Keep the bullet list to roughly five entries. If a release did more than that,
 it did more than a user wants to read about.
 
+## 1.2.0
+
+- Copy a bookmark to another folder while keeping its custom icon and settings
+- Move a bookmark to another folder directly from its gear menu
+- Search destination folders by name, with full paths to tell matching folders
+  apart
+
+To edit a bookmark, open its gear menu and choose **Settings**.
+
 ## 1.1.0
 
 > Your icons settle into place once after this update, and stay put from then
@@ -39,8 +48,6 @@ it did more than a user wants to read about.
   you want
 - Carry a bookmark across pages in one drag, with the canvas turning as you go
 - Find your last open folder already waiting whenever you open a new tab
-- Copy or move a bookmark to any folder from its gear menu, with folder search
-  when the tree is long
 
 Alongside these, a number of fixes and refinements to icon layout, grid sizing,
 and the settings windows.
